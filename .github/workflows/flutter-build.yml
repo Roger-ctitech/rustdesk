@@ -51,8 +51,8 @@ env:
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
   UPLOAD_ARTIFACT: "true"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
-  RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
-  RELAY_SERVER: tdisupport.ddns.net:21117
+  RENDEZVOUS_SERVER: tdisupport.ddns.net
+  RELAY_SERVER: tdisupport.ddns.net
   RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlwNGBG88P27vPI7V9pFLYxFA=
 
 jobs:
