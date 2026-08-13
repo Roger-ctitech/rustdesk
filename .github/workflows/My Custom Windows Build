@@ -1,0 +1,21 @@
+name: My Custom Windows Build
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
+      RELAY_SERVER: tdisupport.ddns.net:21117
+      RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Windows
+        uses: ./.github/workflows/flutter-build.yml
+        with:
+          upload-artifact: true
+          upload-tag: custom
