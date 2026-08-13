@@ -6,8 +6,8 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      RENDEZVOUS_SERVER: tdisupport.ddns.net
-      RELAY_SERVER: tdisupport.ddns.net
+      RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
+      RELAY_SERVER: tdisupport.ddns.net:21117
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
     steps:
       - uses: actions/checkout@v4
