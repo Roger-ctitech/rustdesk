@@ -9,7 +9,6 @@ jobs:
       RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
       RELAY_SERVER: tdisupport.ddns.net:21117
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
-      VCPKG_ROOT: C:\vcpkg
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,7 +18,6 @@ jobs:
         uses: KyleMayes/install-llvm-action@v1
         with:
           version: "15.0"
-          directory: ${{ runner.temp }}/llvm
 
       - name: Setup vcpkg
         shell: pwsh
@@ -35,15 +33,15 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
 
       - name: Build Windows
         shell: bash
+        env:
+          VCPKG_ROOT: C:\vcpkg
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: |
-          export VCPKG_ROOT="C:/vcpkg"
-          export LIBCLANG_PATH="${{ runner.temp }}/llvm/bin"
           pip install -r requirements.txt 2>/dev/null || true
-          python3 build.py --flutter --hwcodec
+          python3 build.py --flutter
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
