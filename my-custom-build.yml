@@ -1,0 +1,29 @@
+name: My Custom Windows Build
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
+      RELAY_SERVER: tdisupport.ddns.net:21117
+      RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Build Windows Custom
+        shell: bash
+        run: |
+          pip install -r requirements.txt 2>/dev/null || true
+          python3 build.py --flutter --hwcodec
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Roger-Support-Windows
+          path: flutter/build/windows/x64/runner/Release/
