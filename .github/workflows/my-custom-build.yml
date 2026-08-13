@@ -1,7 +1,6 @@
 name: My Custom Windows Build
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: windows-2022
@@ -10,45 +9,37 @@ jobs:
       RELAY_SERVER: tdisupport.ddns.net:21117
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
       VCPKG_ROOT: C:\vcpkg
-
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - name: Install LLVM
         uses: KyleMayes/install-llvm-action@v1
         with:
           version: "15.0"
-
       - name: Setup vcpkg base
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: 'C:\vcpkg'
           runVcpkgInstall: true
           vcpkgJsonGlob: '**/vcpkg.json'
-
       - name: Force install opus
         shell: pwsh
         run: |
-          $env:VCPKG_MANIFEST_MODE = "0"
-          C:\vcpkg\vcpkg.exe install opus:x64-windows-static --clean-after-build
-          dir C:\vcpkg\installed\x64-windows-static\include\opus
-
+          $env:VCPKG_DEFAULT_TRIPLET = "x64-windows-static"
+          C:\vcpkg\vcpkg.exe install opus --triplet x64-windows-static --clean-after-build
+          if (Test-Path "C:\vcpkg\installed\x64-windows-static\include\opus") { dir C:\vcpkg\installed\x64-windows-static\include\opus } else { Write-Host "OPUS STILL MISSING, listing installed:"; dir C:\vcpkg\installed\x64-windows-static\include }
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-
       - name: Build Windows
         shell: bash
         run: |
           export VCPKG_ROOT="C:/vcpkg"
           python3 build.py --flutter
-
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
