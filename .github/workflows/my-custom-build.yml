@@ -1,10 +1,6 @@
 name: My Custom Windows Build
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths:
-      - '.github/workflows/my-custom-build.yml'
 
 jobs:
   build:
@@ -15,6 +11,8 @@ jobs:
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install Flutter
