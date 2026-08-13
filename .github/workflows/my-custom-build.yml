@@ -28,12 +28,10 @@ jobs:
           if (Test-Path "C:\vcpkg") { Remove-Item -Recurse -Force "C:\vcpkg" }
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
           C:\vcpkg\bootstrap-vcpkg.bat
-          # Stäng av manifest-läge genom att tillfälligt döpa om vcpkg.json
           if (Test-Path "vcpkg.json") { Rename-Item vcpkg.json vcpkg.json.bak }
           if (Test-Path "vcpkg-configuration.json") { Rename-Item vcpkg-configuration.json vcpkg-configuration.json.bak }
-          C:\vcpkg\vcpkg.exe install opus --triplet x64-windows-static
-          dir C:\vcpkg\installed\x64-windows-static\include\opus
-          # Lägg tillbaka filerna så build.py hittar dem
+          C:\vcpkg\vcpkg.exe install opus libvpx libyuv --triplet x64-windows-static
+          dir C:\vcpkg\installed\x64-windows-static\include\vpx
           if (Test-Path "vcpkg.json.bak") { Rename-Item vcpkg.json.bak vcpkg.json }
           if (Test-Path "vcpkg-configuration.json.bak") { Rename-Item vcpkg-configuration.json.bak vcpkg-configuration.json }
 
