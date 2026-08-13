@@ -1,9 +1,10 @@
 name: My Custom Windows Build
-
 on:
+  workflow_dispatch:
   push:
     branches: [ master ]
-  workflow_dispatch:
+    paths:
+      - 'my-custom-build.yml'
 
 jobs:
   build:
@@ -14,8 +15,19 @@ jobs:
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
     steps:
       - uses: actions/checkout@v4
-      - name: Build Windows
-        uses: ./.github/workflows/flutter-build.yml
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
         with:
-          upload-artifact: true
-          upload-tag: custom
+          channel: stable
+      - name: Build
+        shell: bash
+        run: |
+          pip install -r requirements.txt 2>/dev/null || true
+          python3 build.py --flutter --hwcodec --skip-portable-pack
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Roger-Support-Windows
+          path: flutter/build/windows/x64/runner/Release/
