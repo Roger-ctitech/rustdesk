@@ -22,7 +22,7 @@ jobs:
         with:
           version: "15.0"
 
-      - name: Setup vcpkg + deps
+      - name: Setup vcpkg
         shell: pwsh
         run: |
           if (Test-Path "C:\vcpkg") { Remove-Item -Recurse -Force "C:\vcpkg" }
@@ -44,17 +44,13 @@ jobs:
         with:
           channel: stable
 
-      - name: Install bridge generator
-        shell: bash
+      - name: Install bridge codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
 
-      - name: Generate bridge
-        shell: bash
+      - name: Flutter pub get
         run: |
           cd flutter
           flutter pub get
-          ls flutter_rust_bridge*.yaml
-          flutter_rust_bridge_codegen
 
       - name: Build Windows
         shell: bash
