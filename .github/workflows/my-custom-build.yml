@@ -12,71 +12,90 @@ jobs:
       VCPKG_ROOT: C:\vcpkg
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       LLVM_VERSION: "15.0.6"
+      FLUTTER_VERSION: "3.24.5"
+      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
-      - name: Install LLVM
+      - name: Checkout stable tag 1.4.8
+        run: |
+          git fetch --tags
+          git checkout 1.4.8
+          git submodule update --init --recursive
+
+      - name: Export cache env
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
-          directory: ${{ runner.temp }}/llvm
-
-      - name: Setup vcpkg
-        shell: pwsh
-        run: |
-          if (Test-Path "C:\vcpkg") { Remove-Item -Recurse -Force "C:\vcpkg" }
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-          if (Test-Path "vcpkg.json") { Rename-Item vcpkg.json vcpkg.json.bak }
-          if (Test-Path "vcpkg-configuration.json") { Rename-Item vcpkg-configuration.json vcpkg-configuration.json.bak }
-          C:\vcpkg\vcpkg.exe install opus libvpx libyuv aom --triplet x64-windows-static
-          if (Test-Path "vcpkg.json.bak") { Rename-Item vcpkg.json.bak vcpkg.json }
-          if (Test-Path "vcpkg-configuration.json.bak") { Rename-Item vcpkg-configuration.json.bak vcpkg-configuration.json }
-
-      - name: Install Rust 1.75
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.75
-          components: rustfmt
 
       - name: Install Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.24.5"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
 
-      - name: Install bridge codegen
-        run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
+      - name: Replace engine with rustdesk custom engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+        shell: pwsh
 
-      - name: Generate bridge with LLVM path
+      - name: Patch flutter dropdown
         shell: bash
         run: |
-          cd flutter
-          flutter pub get
-          cd ..
-          rm -f src/bridge_generated.rs src/bridge_generated.io.rs
-          export LIBCLANG_PATH="${{ runner.temp }}/llvm/bin"
-          export PATH="${{ runner.temp }}/llvm/bin:$PATH"
-          echo "LIBCLANG_PATH=$LIBCLANG_PATH"
-          ls $LIBCLANG_PATH | head
-          # Officiella kommandot - notera --llvm-path och att input kan heta flutter_ffi.rs i vissa versioner
-          if [ -f src/flutter_ffi.rs ]; then INPUT=src/flutter_ffi.rs; else INPUT=src/flutter.rs; fi
-          echo "Using input $INPUT"
-          flutter_rust_bridge_codegen --llvm-path "${{ runner.temp }}/llvm" --rust-input $INPUT --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk
-          ls -lh src/bridge_generated.rs
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff || true
 
-      - name: Build Windows
+      - name: Install Rust 1.75
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.75"
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: windows-2022
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed" || (find "$VCPKG_ROOT" -name "*.log" -exec cat {} \; ; exit 1)
+
+      - name: Build rustdesk custom
         shell: bash
         run: |
           export VCPKG_ROOT="C:/vcpkg"
-          export LIBCLANG_PATH="${{ runner.temp }}/llvm/bin"
-          python3 build.py --flutter
+          python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          ls -lh ./rustdesk/*.exe
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Roger-Support-Windows
-          path: flutter/build/windows/x64/runner/Release/
+          name: Roger-Support-Windows-1.4.8-custom
+          path: ./rustdesk/
