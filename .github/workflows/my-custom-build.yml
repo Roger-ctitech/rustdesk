@@ -53,7 +53,8 @@ jobs:
         run: |
           cd flutter
           flutter pub get
-          flutter_rust_bridge_codegen generate
+          ls flutter_rust_bridge*.yaml
+          flutter_rust_bridge_codegen
 
       - name: Build Windows
         shell: bash
