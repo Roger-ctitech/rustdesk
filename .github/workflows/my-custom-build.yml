@@ -53,19 +53,16 @@ jobs:
           cd flutter
           flutter pub get
           cd ..
-          # Sök i HELA repot, inte bara src/
           echo "Searching whole repo..."
-          grep -R "mutc_int" . --include="*.rs" | head -20 || echo "Not found in first search"
-          grep -R "mutc_" . --include="*.rs" | head -30
-          # Laga ALLA .rs filer överallt
-          find . -type f -name "*.rs" -exec sed -i 's/\*mutc_int/*mut c_int/g' {} \;
-          find . -type f -name "*.rs" -exec sed -i 's/\*mutc_char/*mut c_char/g' {} \;
-          find . -type f -name "*.rs" -exec sed -i 's/\*mutc_void/*mut c_void/g' {} \;
-          find . -type f -name "*.rs" -exec sed -i 's/\*constc_char/*const c_char/g' {} \;
-          find . -type f -name "*.rs" -exec sed -i 's/\*constc_int/*const c_int/g' {} \;
-          # Aggressiv fix - lägg till mellanslag efter mut och const om c_ följer direkt
-          find . -type f -name "*.rs" -exec sed -i 's/mutc_/mut c_/g' {} \;
-          find . -type f -name "*.rs" -exec sed -i 's/constc_/const c_/g' {} \;
+          grep -R "mutc_int" . --include="*.rs" | head -20 || echo "No mutc_int found"
+          grep -R "mutc_" . --include="*.rs" | head -30 || echo "No mutc_ found"
+          # Laga ALLA .rs filer
+          find . -type f -name "*.rs" -exec sed -i 's/\*mutc_int/*mut c_int/g' {} \; || true
+          find . -type f -name "*.rs" -exec sed -i 's/\*mutc_char/*mut c_char/g' {} \; || true
+          find . -type f -name "*.rs" -exec sed -i 's/\*mutc_void/*mut c_void/g' {} \; || true
+          find . -type f -name "*.rs" -exec sed -i 's/\*constc_char/*const c_char/g' {} \; || true
+          find . -type f -name "*.rs" -exec sed -i 's/mutc_/mut c_/g' {} \; || true
+          find . -type f -name "*.rs" -exec sed -i 's/constc_/const c_/g' {} \; || true
           echo "After global fix:"
           grep -R "mutc_" . --include="*.rs" | head -5 || echo "All fixed globally!"
           rm -f src/bridge_generated.rs src/bridge_generated.io.rs
