@@ -19,7 +19,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Checkout stable 1.4.8
+      - name: Checkout 1.4.8
         run: |
           git fetch --tags
           git checkout 1.4.8
@@ -29,6 +29,7 @@ jobs:
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "15.0.6"
+          directory: ${{ runner.temp }}/llvm
 
       - name: Install Flutter 3.24.5
         uses: subosito/flutter-action@v2
@@ -36,16 +37,32 @@ jobs:
           channel: stable
           flutter-version: "3.24.5"
 
-      - name: Install Rust 1.75
+      - name: Install Rust 1.75 + rustfmt
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.75"
-          targets: x86_64-pc-windows-msvc
           components: rustfmt
+
+      - name: Install codegen
+        run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
+
+      - name: Generate bridge for 1.4.8
+        shell: bash
+        run: |
+          cd flutter
+          flutter pub get
+          cd..
+          export LIBCLANG_PATH="${{ runner.temp }}/llvm/bin"
+          export PATH="${{ runner.temp }}/llvm/bin:$PATH"
+          if [ -f src/flutter_ffi.rs ]; then INPUT=src/flutter_ffi.rs; else INPUT=src/flutter.rs; fi
+          echo "Generating from $INPUT"
+          flutter_rust_bridge_codegen --llvm-path "${{ runner.temp }}/llvm" --rust-input $INPUT --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk
+          ls -lh src/bridge_generated.rs
+          echo "Bridge OK - size should be >500KB"
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: windows-2022-1.4.8
+          prefix-key: windows-2022-1.4.8-final
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -56,19 +73,16 @@ jobs:
 
       - name: Install vcpkg deps
         shell: bash
-        run: |
-          $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed"
+        run: $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed"
 
-      - name: Build custom
+      - name: Build custom (no hwcodec)
         shell: bash
         run: |
-          flutter --version
-          python3 ./build.py --portable --flutter --skip-portable-pack
-          ls -lh ./flutter/build/windows/x64/runner/Release/
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          python3./build.py --portable --flutter --skip-portable-pack
+          mv./flutter/build/windows/x64/runner/Release./rustdesk
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Roger-Support-Windows-1.4.8
-          path: ./rustdesk/
+          name: Roger-Support-Windows-1.4.8-custom
+          path:./rustdesk/
