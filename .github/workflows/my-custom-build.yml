@@ -11,57 +11,30 @@ jobs:
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
       VCPKG_ROOT: C:\vcpkg
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
-      LLVM_VERSION: "15.0.6"
-      FLUTTER_VERSION: "3.24.5"
       VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Checkout stable tag 1.4.8
+      - name: Checkout stable 1.4.8
         run: |
           git fetch --tags
           git checkout 1.4.8
           git submodule update --init --recursive
 
-      - name: Export cache env
-        uses: actions/github-script@v6
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Install LLVM and Clang
+      - name: Install LLVM 15
         uses: KyleMayes/install-llvm-action@v2
         with:
-          version: ${{ env.LLVM_VERSION }}
+          version: "15.0.6"
 
       - name: Install Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          architecture: x64
-
-      - name: Replace engine with rustdesk custom engine
-        run: |
-          flutter doctor -v
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          mv -Force windows-x64-release/* C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
-        shell: pwsh
-
-      - name: Patch flutter dropdown
-        shell: bash
-        run: |
-          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
-          cd $(dirname $(dirname $(which flutter)))
-          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff || true
+          flutter-version: "3.24.5"
 
       - name: Install Rust 1.75
         uses: dtolnay/rust-toolchain@stable
@@ -72,7 +45,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: windows-2022
+          prefix-key: windows-2022-1.4.8
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -81,21 +54,21 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      - name: Install vcpkg dependencies
+      - name: Install vcpkg deps
         shell: bash
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed" || (find "$VCPKG_ROOT" -name "*.log" -exec cat {} \; ; exit 1)
+          $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed"
 
-      - name: Build rustdesk custom
+      - name: Build custom
         shell: bash
         run: |
-          export VCPKG_ROOT="C:/vcpkg"
+          flutter --version
           python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          ls -lh ./flutter/build/windows/x64/runner/Release/
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
-          ls -lh ./rustdesk/*.exe
 
-      - name: Upload Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Roger-Support-Windows-1.4.8-custom
+          name: Roger-Support-Windows-1.4.8
           path: ./rustdesk/
