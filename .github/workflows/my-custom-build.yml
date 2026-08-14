@@ -22,7 +22,7 @@ jobs:
         with:
           version: "15.0"
 
-      - name: Setup vcpkg + opus
+      - name: Setup vcpkg + deps
         shell: pwsh
         run: |
           if (Test-Path "C:\vcpkg") { Remove-Item -Recurse -Force "C:\vcpkg" }
@@ -31,18 +31,24 @@ jobs:
           if (Test-Path "vcpkg.json") { Rename-Item vcpkg.json vcpkg.json.bak }
           if (Test-Path "vcpkg-configuration.json") { Rename-Item vcpkg-configuration.json vcpkg-configuration.json.bak }
           C:\vcpkg\vcpkg.exe install opus libvpx libyuv aom --triplet x64-windows-static
-          dir C:\vcpkg\installed\x64-windows-static\include\aom
-          dir C:\vcpkg\installed\x64-windows-static\include\opus
           if (Test-Path "vcpkg.json.bak") { Rename-Item vcpkg.json.bak vcpkg.json }
           if (Test-Path "vcpkg-configuration.json.bak") { Rename-Item vcpkg-configuration.json.bak vcpkg-configuration.json }
 
-      - name: Install Rust
+      - name: Install Rust 1.75
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.75
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+
+      - name: Flutter pub get
+        shell: bash
+        run: |
+          cd flutter
+          flutter pub get
 
       - name: Build Windows
         shell: bash
