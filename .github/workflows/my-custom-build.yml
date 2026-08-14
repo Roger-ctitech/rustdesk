@@ -47,20 +47,19 @@ jobs:
       - name: Install bridge codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
 
-      - name: Restore bridge file from official RustDesk
+      - name: Fix typo and generate bridge
         shell: bash
         run: |
           cd flutter
           flutter pub get
           cd ..
-          # Ta bort trasig fil
+          # Laga skrivfelet som gör att codegen kraschar
+          sed -i 's/\*mutc_int/*mut c_int/g' src/flutter.rs
+          sed -i 's/\*mutc_char/*mut c_char/g' src/flutter.rs
           rm -f src/bridge_generated.rs src/bridge_generated.io.rs
-          # Hämta den fungerande från RustDesk 1.2.3 taggen
-          curl -L https://raw.githubusercontent.com/rustdesk/rustdesk/1.2.3/src/bridge_generated.rs -o src/bridge_generated.rs
-          curl -L https://raw.githubusercontent.com/rustdesk/rustdesk/1.2.3/src/bridge_generated.io.rs -o src/bridge_generated.io.rs
-          curl -L https://raw.githubusercontent.com/rustdesk/rustdesk/1.2.3/flutter/lib/generated_bridge.dart -o flutter/lib/generated_bridge.dart
+          flutter_rust_bridge_codegen --rust-input src/flutter.rs --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk
           ls -lh src/bridge_generated.rs
-          echo "Bridge restored - should be ~600KB"
+          echo "Generated OK"
 
       - name: Build Windows
         shell: bash
