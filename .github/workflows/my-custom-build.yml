@@ -44,11 +44,16 @@ jobs:
         with:
           channel: stable
 
-      - name: Flutter pub get
+      - name: Install bridge generator
+        shell: bash
+        run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
+
+      - name: Generate bridge
         shell: bash
         run: |
           cd flutter
           flutter pub get
+          flutter_rust_bridge_codegen generate
 
       - name: Build Windows
         shell: bash
