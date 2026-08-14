@@ -31,7 +31,7 @@ jobs:
           if (Test-Path "vcpkg.json") { Rename-Item vcpkg.json vcpkg.json.bak }
           if (Test-Path "vcpkg-configuration.json") { Rename-Item vcpkg-configuration.json vcpkg-configuration.json.bak }
           C:\vcpkg\vcpkg.exe install opus libvpx libyuv libaom --triplet x64-windows-static
-          dir C:\vcpkg\installed\x64-windows-static\include\vpx
+          dir C:\vcpkg\installed\x64-windows-static\include\aom
           if (Test-Path "vcpkg.json.bak") { Rename-Item vcpkg.json.bak vcpkg.json }
           if (Test-Path "vcpkg-configuration.json.bak") { Rename-Item vcpkg-configuration.json.bak vcpkg-configuration.json }
 
