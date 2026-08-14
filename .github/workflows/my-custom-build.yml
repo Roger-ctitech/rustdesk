@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           flutter --version
-          python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          python3 ./build.py --portable --flutter --skip-portable-pack
           ls -lh ./flutter/build/windows/x64/runner/Release/
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
 
