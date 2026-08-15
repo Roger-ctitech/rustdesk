@@ -11,10 +11,14 @@ jobs:
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
       VCPKG_ROOT: C:\vcpkg
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      FLUTTER_VERSION: "3.24.5"
+      LLVM_VERSION: "15.0.6"
       VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+      SCITER_RUST_VERSION: "1.75"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
@@ -25,44 +29,64 @@ jobs:
           git checkout 1.4.8
           git submodule update --init --recursive
 
-      - name: Install Flutter 3.24.5
+      - name: Download official bridge artifact for 1.4.8
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          repo: rustdesk/rustdesk
+          workflow: bridge.yml
+          workflow_search: true
+          branch: master
+          name: bridge-artifact
+          path:./
+
+      - name: Check bridge files
+        shell: bash
+        run: |
+          ls -lh src/bridge_generated.rs
+          ls -lh flutter/lib/generated_bridge.dart
+          ls -lh flutter/lib/generated_bridge.freezed.dart
+
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        id: flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.24.5"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
 
-      - name: Install Rust 1.75
+      - name: Replace engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          $dst = "${{ steps.flutter.outputs.CACHE-PATH }}/bin/cache/artifacts/engine/windows-x64-release"
+          Write-Host "Copy to $dst"
+          Copy-Item -Path windows-x64-release/* -Destination $dst -Force -Recurse
+        shell: pwsh
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff || true
+
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.75"
+          toolchain: ${{ env.SCITER_RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
           components: rustfmt
-
-      - name: Install codegen
-        shell: bash
-        run: |
-          cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked || true
-
-      - name: Generate bridge locally
-        shell: bash
-        run: |
-          cd flutter
-          flutter pub get
-          cd ..
-          if [ -f src/flutter_ffi.rs ]; then INPUT=src/flutter_ffi.rs; else INPUT=src/flutter.rs; fi
-          echo "Input $INPUT"
-          flutter_rust_bridge_codegen --rust-input $INPUT --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk
-          ls -lh src/bridge_generated.rs
-
-      - name: Generate freezed
-        shell: bash
-        run: |
-          cd flutter
-          dart run build_runner build --delete-conflicting-outputs
-          ls -lh lib/generated_bridge.freezed.dart
 
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: win-148-final
+          prefix-key: windows-148-official
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -76,15 +100,15 @@ jobs:
         run: |
           $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed"
 
-      - name: Build custom
+      - name: Build rustdesk
         shell: bash
         run: |
-          python3 ./build.py --portable --flutter --skip-portable-pack
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
-          ls -lh ./rustdesk/
+          python3./build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          mv./flutter/build/windows/x64/runner/Release./rustdesk
+          ls -lh./rustdesk/
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: Roger-Support-Windows
-          path: ./rustdesk/
+          path:./rustdesk/
