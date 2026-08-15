@@ -25,52 +25,6 @@ jobs:
           git checkout 1.4.8
           git submodule update --init --recursive
 
-      - name: Download official bridge for 1.4.8
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          repo: rustdesk/rustdesk
-          workflow: bridge.yml
-          branch: 1.4.8
-          name: bridge-artifact
-          path:./bridge-download
-          workflow_conclusion: success
-          if_no_artifact_found: warn
-
-      - name: Restore bridge files
-        shell: bash
-        run: |
-          ls -R./bridge-download || echo "no bridge-download, trying alternative"
-          # Om officiella artifact inte hittades, ladda från release tag direkt via gh cli
-          if [! -f./bridge-download/src/bridge_generated.rs ]; then
-            echo "Trying fallback - use bridge from latest successful run"
-            gh run list --repo rustdesk/rustdesk --workflow=bridge.yml --limit 5
-          fi
-          # Kopiera filerna dit de ska vara
-          cp -r./bridge-download/*./ 2>/dev/null || true
-          cp./bridge-download/src/bridge_generated.rs./src/ 2>/dev/null || true
-          cp./bridge-download/src/bridge_generated.io.rs./src/ 2>/dev/null || true
-          cp./bridge-download/flutter/lib/generated_bridge.dart./flutter/lib/ 2>/dev/null || true
-          cp./bridge-download/flutter/lib/generated_bridge.freezed.dart./flutter/lib/ 2>/dev/null || true
-          cp./bridge-download/flutter/windows/runner/bridge_generated.h./flutter/windows/runner/ 2>/dev/null || true
-          ls -lh src/bridge_generated.rs flutter/lib/generated_bridge.dart flutter/lib/generated_bridge.freezed.dart || echo "Bridge still missing, will generate"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fallback generate if still missing
-        if: failure() || true
-        shell: bash
-        run: |
-          if [! -f flutter/lib/generated_bridge.freezed.dart ]; then
-            echo "Bridge files missing, generating locally"
-            cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked || true
-            flutter pub get --directory=flutter || true
-            cd flutter && flutter pub get && cd..
-            flutter_rust_bridge_codegen --rust-input src/flutter_ffi.rs --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk || flutter_rust_bridge_codegen --rust-input src/flutter.rs --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk
-            cd flutter && dart run build_runner build --delete-conflicting-outputs || flutter packages pub run build_runner build --delete-conflicting-outputs
-            cd..
-          fi
-          ls -lh src/bridge_generated.rs flutter/lib/generated_bridge.dart flutter/lib/generated_bridge.freezed.dart
-
       - name: Install Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
@@ -83,9 +37,32 @@ jobs:
           toolchain: "1.75"
           components: rustfmt
 
+      - name: Install codegen
+        shell: bash
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked || true
+
+      - name: Generate bridge locally
+        shell: bash
+        run: |
+          cd flutter
+          flutter pub get
+          cd ..
+          if [ -f src/flutter_ffi.rs ]; then INPUT=src/flutter_ffi.rs; else INPUT=src/flutter.rs; fi
+          echo "Input $INPUT"
+          flutter_rust_bridge_codegen --rust-input $INPUT --dart-output flutter/lib/generated_bridge.dart --c-output flutter/windows/runner/bridge_generated.h --rust-output src/bridge_generated.rs --class-name RustDesk
+          ls -lh src/bridge_generated.rs
+
+      - name: Generate freezed
+        shell: bash
+        run: |
+          cd flutter
+          dart run build_runner build --delete-conflicting-outputs
+          ls -lh lib/generated_bridge.freezed.dart
+
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: win-148-final2
+          prefix-key: win-148-final
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -96,17 +73,18 @@ jobs:
 
       - name: Install vcpkg deps
         shell: bash
-        run: $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed"
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} --x-install-root="$VCPKG_ROOT/installed"
 
       - name: Build custom
         shell: bash
         run: |
-          python3./build.py --portable --flutter --skip-portable-pack
-          mv./flutter/build/windows/x64/runner/Release./rustdesk
-          ls./rustdesk/
+          python3 ./build.py --portable --flutter --skip-portable-pack
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          ls -lh ./rustdesk/
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: Roger-Support-Windows
-          path:./rustdesk/
+          path: ./rustdesk/
