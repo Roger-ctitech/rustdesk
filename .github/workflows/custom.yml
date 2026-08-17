@@ -54,34 +54,60 @@ jobs:
       # --------------------------------------------------
       # 3. Lägg in TELE-DATA-servern
       # --------------------------------------------------
+           # --------------------------------------------------
+      # 3. Lägg in TELE-DATA-servern
+      # --------------------------------------------------
       - name: Configure TELE-DATA server
         shell: pwsh
         run: |
-
           $config = ".\libs\hbb_common\src\config.rs"
+
+          if (-not (Test-Path $config)) {
+            Write-Error "Hittar inte $config"
+            exit 1
+          }
 
           $content = Get-Content $config -Raw
 
-          # Kontrollera att vi verkligen har rätt struktur
+          Write-Host "Konfigurerar RustDesk för TELE-DATA"
+          Write-Host "Server: $env:RENDEZVOUS_SERVER"
+
+          # Kontrollera att de förväntade konstanterna finns
           if ($content -notmatch "RENDEZVOUS_SERVERS") {
-            Write-Error "RENDEZVOUS_SERVERS hittades inte i config.rs"
+            Write-Error "RENDEZVOUS_SERVERS hittades inte"
             exit 1
           }
 
           if ($content -notmatch "RS_PUB_KEY") {
-            Write-Error "RS_PUB_KEY hittades inte i config.rs"
+            Write-Error "RS_PUB_KEY hittades inte"
             exit 1
           }
 
-          # Serveradress
-          $content = $content -replace `
-            '(?s)(pub\s+const\s+RENDEZVOUS_SERVERS\s*:\s*&\[&str\]\s*=\s*&\[\s*)".*?"', `
-            '${1}"' + $env:RENDEZVOUS_SERVER + '"'
+          # ------------------------------------------------
+          # Byt RENDEZVOUS_SERVERS
+          # ------------------------------------------------
+          $serverBlock = @"
+pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
+    "$env:RENDEZVOUS_SERVER",
+];
+"@
 
-          # Public key
-          $content = $content -replace `
-            '(?m)(pub\s+const\s+RS_PUB_KEY\s*:\s*&str\s*=\s*)".*?"', `
-            '${1}"' + $env:RS_PUB_KEY + '"'
+          $content = [regex]::Replace(
+            $content,
+            '(?s)pub const RENDEZVOUS_SERVERS:.*?;',
+            $serverBlock.Trim()
+          )
+
+          # ------------------------------------------------
+          # Byt RS_PUB_KEY
+          # ------------------------------------------------
+          $keyLine = 'pub const RS_PUB_KEY: &'static str = "' + $env:RS_PUB_KEY + '";'
+
+          $content = [regex]::Replace(
+            $content,
+            '(?m)^\s*pub const RS_PUB_KEY:.*?;\s*$',
+            $keyLine
+          )
 
           Set-Content `
             -Path $config `
@@ -89,9 +115,15 @@ jobs:
             -Encoding UTF8
 
           Write-Host ""
-          Write-Host "Efter ändringen:"
-          Select-String -Path $config `
-            -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY"
+          Write-Host "=========================================="
+          Write-Host "KONFIGURATION EFTER ÄNDRING"
+          Write-Host "=========================================="
+
+          Select-String `
+            -Path $config `
+            -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY|RENDEZVOUS_PORT|RELAY_PORT"
+
+          Write-Host "=========================================="
 
       # --------------------------------------------------
       # 4. Installera LLVM
