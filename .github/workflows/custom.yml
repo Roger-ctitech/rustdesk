@@ -11,16 +11,12 @@ jobs:
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout 1.4.8 direkt
+        uses: actions/checkout@v4
         with:
+          ref: 1.4.8
           submodules: recursive
-
-      - name: Checkout 1.4.8
-        shell: bash
-        run: |
-          git fetch --tags
-          git checkout 1.4.8
-          git submodule update --init --recursive
+          fetch-depth: 0
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
