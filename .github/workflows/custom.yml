@@ -52,9 +52,9 @@ jobs:
             -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY"
 
       # --------------------------------------------------
-      # 3. Lägg in TELE-DATA-servern
+      # 3. Kontrollera RustDesk-konfigurationen
       # --------------------------------------------------
-                - name: Configure TELE-DATA server
+      - name: Inspect RustDesk config
         shell: pwsh
         run: |
           $config = ".\libs\hbb_common\src\config.rs"
@@ -64,51 +64,11 @@ jobs:
             exit 1
           }
 
-          $content = Get-Content $config -Raw
-
-          Write-Host "Konfigurerar RustDesk för TELE-DATA"
-          Write-Host "Server: $env:RENDEZVOUS_SERVER"
-
-          if ($content -notmatch "RENDEZVOUS_SERVERS") {
-            Write-Error "RENDEZVOUS_SERVERS hittades inte"
-            exit 1
-          }
-
-          if ($content -notmatch "RS_PUB_KEY") {
-            Write-Error "RS_PUB_KEY hittades inte"
-            exit 1
-          }
-
-          # Byt serverlista
-          $content = [regex]::Replace(
-            $content,
-            '(?s)pub const RENDEZVOUS_SERVERS:.*?;',
-            ('pub const RENDEZVOUS_SERVERS: &' + "'static [&'static str] = &[" + "`r`n" +
-             '"' + $env:RENDEZVOUS_SERVER + '"' + "`r`n];")
-          )
-
-          # Byt public key
-          $keyLine = 'pub const RS_PUB_KEY: &' + "'static str = """ + $env:RS_PUB_KEY + '";'
-
-          $content = [regex]::Replace(
-            $content,
-            '(?m)^\s*pub const RS_PUB_KEY:.*?;\s*$',
-            $keyLine
-          )
-
-          Set-Content `
-            -Path $config `
-            -Value $content `
-            -Encoding UTF8
-
-          Write-Host ""
           Write-Host "=========================================="
-          Write-Host "KONFIGURATION EFTER ÄNDRING"
+          Write-Host "RustDesk config.rs"
           Write-Host "=========================================="
 
-          Select-String `
-            -Path $config `
-            -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY|RENDEZVOUS_PORT|RELAY_PORT"
+          Get-Content $config
 
           Write-Host "=========================================="
 
