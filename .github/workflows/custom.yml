@@ -54,10 +54,7 @@ jobs:
       # --------------------------------------------------
       # 3. Lägg in TELE-DATA-servern
       # --------------------------------------------------
-           # --------------------------------------------------
-      # 3. Lägg in TELE-DATA-servern
-      # --------------------------------------------------
-      - name: Configure TELE-DATA server
+                - name: Configure TELE-DATA server
         shell: pwsh
         run: |
           $config = ".\libs\hbb_common\src\config.rs"
@@ -72,7 +69,6 @@ jobs:
           Write-Host "Konfigurerar RustDesk för TELE-DATA"
           Write-Host "Server: $env:RENDEZVOUS_SERVER"
 
-          # Kontrollera att de förväntade konstanterna finns
           if ($content -notmatch "RENDEZVOUS_SERVERS") {
             Write-Error "RENDEZVOUS_SERVERS hittades inte"
             exit 1
@@ -83,25 +79,16 @@ jobs:
             exit 1
           }
 
-          # ------------------------------------------------
-          # Byt RENDEZVOUS_SERVERS
-          # ------------------------------------------------
-          $serverBlock = @"
-pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
-    "$env:RENDEZVOUS_SERVER",
-];
-"@
-
+          # Byt serverlista
           $content = [regex]::Replace(
             $content,
             '(?s)pub const RENDEZVOUS_SERVERS:.*?;',
-            $serverBlock.Trim()
+            ('pub const RENDEZVOUS_SERVERS: &' + "'static [&'static str] = &[" + "`r`n" +
+             '"' + $env:RENDEZVOUS_SERVER + '"' + "`r`n];")
           )
 
-          # ------------------------------------------------
-          # Byt RS_PUB_KEY
-          # ------------------------------------------------
-          $keyLine = 'pub const RS_PUB_KEY: &'static str = "' + $env:RS_PUB_KEY + '";'
+          # Byt public key
+          $keyLine = 'pub const RS_PUB_KEY: &' + "'static str = """ + $env:RS_PUB_KEY + '";'
 
           $content = [regex]::Replace(
             $content,
