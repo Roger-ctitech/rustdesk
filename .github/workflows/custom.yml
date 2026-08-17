@@ -4,140 +4,365 @@ on:
   workflow_dispatch:
 
 env:
-  SCITER_RUST_VERSION: "1.75"
-  RUST_VERSION: "1.75"
-  LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.24.5"
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
-
+  # ==================================================
+  # 1. TELE-DATA / RustDesk server
+  # ==================================================
   RENDEZVOUS_SERVER: "tdisupport.ddns.net"
   RS_PUB_KEY: "Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA="
 
+  # ==================================================
+  # 2. RustDesk 1.4.8 build versions
+  # ==================================================
+  RUSTDESK_VERSION: "1.4.8"
+  RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+
+  # ==================================================
+  # 3. vcpkg
+  # ==================================================
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
+  VCPKG_ROOT: "C:\\vcpkg"
+  VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
+
+  # ==================================================
+  # 4. Flutter Rust Bridge
+  # ==================================================
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  CARGO_EXPAND_VERSION: "1.0.95"
+
+
+# ======================================================
+# JOB 1
+# Generate Flutter Rust Bridge
+# ======================================================
+
 jobs:
+
+  # ----------------------------------------------------
+  # 5. Generate bridge
+  # ----------------------------------------------------
+  generate-bridge:
+
+    name: 5 - Generate bridge
+
+    runs-on: ubuntu-22.04
+
+    steps:
+
+      # ------------------------------------------------
+      # 6. Checkout RustDesk 1.4.8
+      # ------------------------------------------------
+      - name: 6 - Checkout RustDesk 1.4.8
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: "1.4.8"
+          submodules: recursive
+          fetch-depth: 0
+
+      # ------------------------------------------------
+      # 7. Install bridge prerequisites
+      # ------------------------------------------------
+      - name: 7 - Install prerequisites
+        run: |
+          sudo apt-get update -y
+
+          sudo apt-get install -y \
+            ca-certificates \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            git \
+            g++ \
+            libclang-dev \
+            libgtk-3-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            wget
+
+      # ------------------------------------------------
+      # 8. Install Rust 1.75
+      # ------------------------------------------------
+      - name: 8 - Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          target: x86_64-unknown-linux-gnu
+          components: rustfmt
+
+      # ------------------------------------------------
+      # 9. Install Flutter 3.22.3 for bridge
+      # ------------------------------------------------
+      - name: 9 - Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.22.3"
+          cache: true
+
+      # ------------------------------------------------
+      # 10. Install Flutter Rust Bridge
+      # ------------------------------------------------
+      - name: 10 - Install Flutter Rust Bridge
+        shell: bash
+        run: |
+          cargo install cargo-expand \
+            --version "${CARGO_EXPAND_VERSION}" \
+            --locked
+
+          cargo install flutter_rust_bridge_codegen \
+            --version "${FLUTTER_RUST_BRIDGE_VERSION}" \
+            --features "uuid" \
+            --locked
+
+      # ------------------------------------------------
+      # 11. Prepare Flutter dependencies
+      # ------------------------------------------------
+      - name: 11 - Prepare Flutter
+        shell: bash
+        run: |
+          sed -i \
+            -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
+            flutter/pubspec.yaml
+
+          pushd flutter
+          flutter pub get
+          popd
+
+      # ------------------------------------------------
+      # 12. Generate bridge files
+      # ------------------------------------------------
+      - name: 12 - Generate bridge
+        shell: bash
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+
+          cp \
+            ./flutter/macos/Runner/bridge_generated.h \
+            ./flutter/ios/Runner/bridge_generated.h
+
+          echo ""
+          echo "=========================================="
+          echo "Bridge files generated:"
+          echo "=========================================="
+
+          ls -lh src/bridge_generated.rs
+          ls -lh src/bridge_generated.io.rs
+          ls -lh flutter/lib/generated_bridge.dart
+          ls -lh flutter/lib/generated_bridge.freezed.dart
+
+      # ------------------------------------------------
+      # 13. Upload bridge artifact
+      # ------------------------------------------------
+      - name: 13 - Upload bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-artifact
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+            ./flutter/macos/Runner/bridge_generated.h
+            ./flutter/ios/Runner/bridge_generated.h
+
+
+# ======================================================
+# JOB 2
+# Build Windows x64
+# ======================================================
+
   build:
+
+    name: Build tdisupport
+
+    needs: generate-bridge
+
     runs-on: windows-2022
 
     steps:
 
-      # --------------------------------------------------
-      # 1. Hämta exakt RustDesk 1.4.8
-      # --------------------------------------------------
-      - name: Checkout RustDesk 1.4.8
+      # ------------------------------------------------
+      # 14. Checkout RustDesk 1.4.8
+      # ------------------------------------------------
+      - name: 14 - Checkout RustDesk 1.4.8
         uses: actions/checkout@v4
         with:
           repository: rustdesk/rustdesk
-          ref: 1.4.8
+          ref: "1.4.8"
           submodules: recursive
           fetch-depth: 0
 
-      # --------------------------------------------------
-      # 2. Kontrollera hbb_common
-      # --------------------------------------------------
-      - name: Check hbb_common
+      # ------------------------------------------------
+      # 15. Restore bridge files
+      # ------------------------------------------------
+      - name: 15 - Restore bridge files
+        uses: actions/download-artifact@v4
+        with:
+          name: bridge-artifact
+          path: ./
+
+      # ------------------------------------------------
+      # 16. Verify bridge files
+      # ------------------------------------------------
+      - name: 16 - Verify bridge files
         shell: pwsh
         run: |
-          $config = ".\libs\hbb_common\src\config.rs"
+          Write-Host "=========================================="
+          Write-Host "Kontrollerar bridge-filer"
+          Write-Host "=========================================="
 
-          if (-not (Test-Path $config)) {
-            Write-Error "Hittar inte $config"
-            exit 1
+          $files = @(
+            ".\src\bridge_generated.rs",
+            ".\src\bridge_generated.io.rs",
+            ".\flutter\lib\generated_bridge.dart",
+            ".\flutter\lib\generated_bridge.freezed.dart"
+          )
+
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Saknar bridge-fil: $file"
+              exit 1
+            }
+
+            Write-Host "OK: $file"
           }
 
-          Write-Host "Hittade:"
-          Write-Host $config
+          Write-Host "Alla bridge-filer finns."
 
-          Write-Host ""
-          Write-Host "Nuvarande serverkonfiguration:"
-          Select-String -Path $config `
-            -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY"
 
-      # --------------------------------------------------
-      # 3. Kontrollera RustDesk-konfigurationen
-      # --------------------------------------------------
-      - name: Inspect RustDesk config
-        shell: pwsh
-        run: |
-          $config = ".\libs\hbb_common\src\config.rs"
-
-          if (-not (Test-Path $config)) {
-            Write-Error "Hittar inte $config"
-            exit 1
-          }
-
-          Write-Host "=========================================="
-          Write-Host "RustDesk config.rs"
-          Write-Host "=========================================="
-
-          Get-Content $config
-
-          Write-Host "=========================================="
-
-      # --------------------------------------------------
-      # 4. Installera LLVM
-      # --------------------------------------------------
-      - name: Install LLVM
+      # ------------------------------------------------
+      # 17. Install LLVM
+      # ------------------------------------------------
+      - name: 17 - Install LLVM
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
 
-      # --------------------------------------------------
-      # 5. Installera Flutter 3.24.5
-      # --------------------------------------------------
-      - name: Install Flutter
+
+      # ------------------------------------------------
+      # 18. Install Flutter 3.24.5
+      # ------------------------------------------------
+      - name: 18 - Install Flutter
+        id: flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           architecture: x64
 
-      # --------------------------------------------------
-      # 6. Förbered Flutter
-      # --------------------------------------------------
-      - name: Prepare Flutter
+
+      # ------------------------------------------------
+      # 19. Replace Flutter engine
+      # ------------------------------------------------
+      - name: 19 - Replace Flutter engine
         shell: pwsh
         run: |
           flutter doctor -v
-          flutter config --enable-windows-desktop
           flutter precache --windows
 
-      # --------------------------------------------------
-      # 7. Rust
-      # --------------------------------------------------
-      - name: Install Rust
+          Write-Host "Laddar RustDesk custom Flutter engine..."
+
+          Invoke-WebRequest `
+            -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip `
+            -OutFile windows-x64-release.zip
+
+          Expand-Archive `
+            -Path windows-x64-release.zip `
+            -DestinationPath windows-x64-release `
+            -Force
+
+          $flutterRoot = "${{ steps.flutter.outputs.CACHE-PATH }}"
+
+          $destination = Join-Path `
+            $flutterRoot `
+            "bin\cache\artifacts\engine\windows-x64-release"
+
+          Write-Host "Flutter root:"
+          Write-Host $flutterRoot
+
+          Write-Host "Engine destination:"
+          Write-Host $destination
+
+          New-Item `
+            -ItemType Directory `
+            -Path $destination `
+            -Force | Out-Null
+
+          Copy-Item `
+            -Path "windows-x64-release\*" `
+            -Destination $destination `
+            -Force `
+            -Recurse
+
+          Write-Host "Custom Flutter engine installerad."
+
+
+      # ------------------------------------------------
+      # 20. Patch Flutter
+      # ------------------------------------------------
+      - name: 20 - Patch Flutter
+        shell: bash
+        run: |
+          cp \
+            .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff \
+            "$(dirname "$(dirname "$(which flutter)")")"
+
+          cd "$(dirname "$(dirname "$(which flutter)")")"
+
+          git apply \
+            flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+
+      # ------------------------------------------------
+      # 21. Install Rust
+      # ------------------------------------------------
+      - name: 21 - Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
           components: rustfmt
 
-      # --------------------------------------------------
-      # 8. Rust cache
-      # --------------------------------------------------
-      - name: Rust cache
+
+      # ------------------------------------------------
+      # 22. Rust cache
+      # ------------------------------------------------
+      - name: 22 - Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: windows-148-tdisupport
+          prefix-key: rustdesk-1.4.8-windows
 
-      # --------------------------------------------------
-      # 9. VCPKG
-      # --------------------------------------------------
-      - name: Setup vcpkg
+
+      # ------------------------------------------------
+      # 23. Setup vcpkg
+      # ------------------------------------------------
+      - name: 23 - Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
-      # --------------------------------------------------
-      # 10. Install vcpkg dependencies
-      # --------------------------------------------------
-      - name: Install vcpkg dependencies
+
+      # ------------------------------------------------
+      # 24. Install vcpkg dependencies
+      # ------------------------------------------------
+      - name: 24 - Install vcpkg dependencies
         shell: bash
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
           echo "=========================================="
-          echo "Installerar RustDesk vcpkg dependencies"
+          echo "Installerar vcpkg dependencies"
           echo "=========================================="
 
           if ! $VCPKG_ROOT/vcpkg \
@@ -161,138 +386,144 @@ jobs:
           fi
 
           echo ""
-          echo "=========================================="
-          echo "Kontrollerar FFmpeg"
-          echo "=========================================="
-
-          if [ -f "$VCPKG_ROOT/installed/x64-windows-static/include/libavcodec/avcodec.h" ]; then
-            echo "OK: libavcodec/avcodec.h finns"
-          else
-            echo "VARNING: libavcodec/avcodec.h saknas"
-          fi
-
-          if [ -f "$VCPKG_ROOT/installed/x64-windows-static/include/libavutil/avutil.h" ]; then
-            echo "OK: libavutil/avutil.h finns"
-          else
-            echo "VARNING: libavutil/avutil.h saknas"
-          fi
-
-          if [ -f "$VCPKG_ROOT/installed/x64-windows-static/include/libavformat/avformat.h" ]; then
-            echo "OK: libavformat/avformat.h finns"
-          else
-            echo "VARNING: libavformat/avformat.h saknas"
-          fi
-
-          echo ""
-          echo "=========================================="
-          echo "VCPKG KLART"
+          echo "FFmpeg build log:"
           echo "=========================================="
 
-      # --------------------------------------------------
-      # 11. Custom Flutter engine
-      # --------------------------------------------------
-      - name: Replace Flutter engine
+          head -n 100 \
+            "$VCPKG_ROOT/buildtrees/ffmpeg/build-x64-windows-static-rel-out.log" \
+            || true
+
+
+      # ------------------------------------------------
+      # 25. Configure TELE-DATA server
+      # ------------------------------------------------
+      - name: 25 - Configure TELE-DATA server
         shell: pwsh
         run: |
-          flutter doctor -v
-          flutter precache --windows
+          $config = ".\libs\hbb_common\src\config.rs"
 
-          Write-Host "Laddar RustDesk Flutter engine..."
-
-          Invoke-WebRequest `
-            -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip `
-            -OutFile windows-x64-release.zip
-
-          Write-Host "Packar upp engine..."
-
-          Expand-Archive `
-            -Path windows-x64-release.zip `
-            -DestinationPath windows-x64-release `
-            -Force
-
-          $dst = "C:\hostedtoolcache\windows\flutter\stable-${{ env.FLUTTER_VERSION }}-x64\bin\cache\artifacts\engine\windows-x64-release"
-
-          Write-Host "Skapar destination:"
-          Write-Host $dst
-
-          New-Item `
-            -ItemType Directory `
-            -Path $dst `
-            -Force | Out-Null
-
-          Write-Host "Kopierar engine..."
-
-          Copy-Item `
-            -Path "windows-x64-release\*" `
-            -Destination $dst `
-            -Force `
-            -Recurse
-
-          Write-Host "Flutter engine installerad."
-
-      # --------------------------------------------------
-      # 12. Flutter patch
-      # --------------------------------------------------
-      - name: Patch Flutter
-        shell: bash
-        run: |
-          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff \
-             $(dirname $(dirname $(which flutter)))
-
-          cd $(dirname $(dirname $(which flutter)))
-
-          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
-
-      # --------------------------------------------------
-      # 13. Bygg RustDesk med officiella build.py
-      # --------------------------------------------------
-      - name: Build RustDesk
-        shell: pwsh
-        run: |
-          python3 .\build.py `
-            --portable `
-            --flutter `
-            --skip-portable-pack `
-            --hwcodec `
-            --vram
-
-      # --------------------------------------------------
-      # 14. Kontrollera resultatet
-      # --------------------------------------------------
-      - name: Check result
-        shell: pwsh
-        run: |
-
-          $source = ".\flutter\build\windows\x64\runner\Release"
-
-          if (-not (Test-Path "$source\rustdesk.exe")) {
-            Write-Error "rustdesk.exe skapades inte!"
+          if (-not (Test-Path $config)) {
+            Write-Error "Hittar inte $config"
             exit 1
           }
 
-          Write-Host ""
-          Write-Host "BUILD LYCKADES!"
-          Get-Item "$source\rustdesk.exe"
+          Write-Host "Konfigurerar RustDesk för TELE-DATA"
 
-      # --------------------------------------------------
-      # 15. Byt namn till tdisupport.exe
-      # --------------------------------------------------
-      - name: Create tdisupport.exe
+          $content = Get-Content $config -Raw
+
+          # RENDEZVOUS_SERVERS
+          $content = [regex]::Replace(
+            $content,
+            '(?m)^\s*pub const RENDEZVOUS_SERVERS.*?;\s*$',
+            'pub const RENDEZVOUS_SERVERS: &[&str] = &["' +
+            $env:RENDEZVOUS_SERVER +
+            '"];'
+          )
+
+          # RS_PUB_KEY
+          $content = [regex]::Replace(
+            $content,
+            '(?m)^\s*pub const RS_PUB_KEY.*?;\s*$',
+            'pub const RS_PUB_KEY: &str = "' +
+            $env:RS_PUB_KEY +
+            '";'
+          )
+
+          Set-Content `
+            -Path $config `
+            -Value $content `
+            -Encoding UTF8
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "TELE-DATA configuration"
+          Write-Host "=========================================="
+
+          Select-String `
+            -Path $config `
+            -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY|RENDEZVOUS_PORT|RELAY_PORT"
+
+
+      # ------------------------------------------------
+      # 26. Verify server configuration
+      # ------------------------------------------------
+      - name: 26 - Verify server configuration
         shell: pwsh
         run: |
+          $config = ".\libs\hbb_common\src\config.rs"
 
-          Copy-Item `
-            ".\flutter\build\windows\x64\runner\Release\rustdesk.exe" `
-            ".\tdisupport.exe"
+          $content = Get-Content $config -Raw
 
-          Write-Host ""
-          Write-Host "tdisupport.exe skapad!"
+          if ($content -notmatch [regex]::Escape($env:RENDEZVOUS_SERVER)) {
+            Write-Error "tdisupport.ddns.net finns inte i config.rs"
+            exit 1
+          }
 
-      # --------------------------------------------------
-      # 16. Ladda upp
-      # --------------------------------------------------
-      - name: Upload tdisupport
+          if ($content -notmatch [regex]::Escape($env:RS_PUB_KEY)) {
+            Write-Error "RS_PUB_KEY finns inte i config.rs"
+            exit 1
+          }
+
+          Write-Host "Serverkonfiguration verifierad."
+
+
+      # ------------------------------------------------
+      # 27. Build RustDesk
+      # ------------------------------------------------
+      - name: 27 - Build RustDesk
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "BYGGER TDIsupport"
+          echo "=========================================="
+
+          python3 ./build.py \
+            --portable \
+            --flutter \
+            --skip-portable-pack \
+            --hwcodec \
+            --vram
+
+          echo ""
+          echo "Build klar."
+
+          mv \
+            ./flutter/build/windows/x64/runner/Release \
+            ./rustdesk
+
+          echo ""
+          echo "=========================================="
+          echo "FÄRDIG KLIENT"
+          echo "=========================================="
+
+          ls -lh ./rustdesk/
+
+
+      # ------------------------------------------------
+      # 28. Rename executable
+      # ------------------------------------------------
+      - name: 28 - Rename executable
+        shell: pwsh
+        run: |
+          $exe = ".\rustdesk\rustdesk.exe"
+
+          if (-not (Test-Path $exe)) {
+            Write-Error "rustdesk.exe hittades inte"
+            exit 1
+          }
+
+          Rename-Item `
+            -Path $exe `
+            -NewName "tdisupport.exe"
+
+          Write-Host "Klienten heter nu tdisupport.exe"
+
+
+      # ------------------------------------------------
+      # 29. Upload final client
+      # ------------------------------------------------
+      - name: 29 - Upload tdisupport
         uses: actions/upload-artifact@v4
         with:
-          name: tdisupport
-          path: .\tdisupport.exe
+          name: tdisupport-Windows-x64
+          path: ./rustdesk/
