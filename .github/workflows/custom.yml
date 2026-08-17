@@ -1,0 +1,42 @@
+name: custom
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
+      RELAY_SERVER: tdisupport.ddns.net:21117
+      RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout 1.4.8
+        shell: bash
+        run: |
+          git fetch --tags
+          git checkout 1.4.8
+          git submodule update --init --recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.75"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build exe
+        shell: bash
+        run: |
+          cargo build --release --features inline
+          ls -lh target/release/rustdesk.exe
+          cp target/release/rustdesk.exe ./Roger-Support.exe
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Roger-Support-Custom
+          path: ./Roger-Support.exe
