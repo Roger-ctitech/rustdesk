@@ -147,21 +147,38 @@ jobs:
           flutter doctor -v
           flutter precache --windows
 
+          Write-Host "Laddar RustDesk Flutter engine..."
+
           Invoke-WebRequest `
             -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip `
             -OutFile windows-x64-release.zip
 
+          Write-Host "Packar upp engine..."
+
           Expand-Archive `
             -Path windows-x64-release.zip `
-            -DestinationPath windows-x64-release
+            -DestinationPath windows-x64-release `
+            -Force
 
           $dst = "C:\hostedtoolcache\windows\flutter\stable-${{ env.FLUTTER_VERSION }}-x64\bin\cache\artifacts\engine\windows-x64-release"
 
+          Write-Host "Skapar destination:"
+          Write-Host $dst
+
+          New-Item `
+            -ItemType Directory `
+            -Path $dst `
+            -Force | Out-Null
+
+          Write-Host "Kopierar engine..."
+
           Copy-Item `
-            -Path windows-x64-release\* `
+            -Path "windows-x64-release\*" `
             -Destination $dst `
             -Force `
             -Recurse
+
+          Write-Host "Flutter engine installerad."
 
       # --------------------------------------------------
       # 12. Flutter patch
