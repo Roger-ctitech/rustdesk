@@ -139,7 +139,11 @@ jobs:
           echo "=========================================="
 
           $VCPKG_ROOT/vcpkg install \
-            --triplet x64-windows-static \
+            libvpx:x64-windows-static \
+            libyuv:x64-windows-static \
+            opus:x64-windows-static \
+            aom:x64-windows-static \
+            "ffmpeg[amf,core,nvcodec,qsv]:x64-windows-static" \
             --x-install-root="$VCPKG_ROOT/installed"
 
           echo ""
@@ -147,20 +151,29 @@ jobs:
           echo "Kontrollerar FFmpeg"
           echo "=========================================="
 
-          echo "FFmpeg header:"
-          ls -lh "$VCPKG_ROOT/installed/x64-windows-static/include/libavcodec/avcodec.h" || true
+          if [ -f "$VCPKG_ROOT/installed/x64-windows-static/include/libavcodec/avcodec.h" ]; then
+            echo "OK: libavcodec/avcodec.h finns"
+          else
+            echo "FEL: libavcodec/avcodec.h saknas"
+            exit 1
+          fi
+
+          if [ -f "$VCPKG_ROOT/installed/x64-windows-static/include/libavutil/avutil.h" ]; then
+            echo "OK: libavutil/avutil.h finns"
+          else
+            echo "FEL: libavutil/avutil.h saknas"
+            exit 1
+          fi
+
+          if [ -f "$VCPKG_ROOT/installed/x64-windows-static/include/libavformat/avformat.h" ]; then
+            echo "OK: libavformat/avformat.h finns"
+          else
+            echo "FEL: libavformat/avformat.h saknas"
+            exit 1
+          fi
 
           echo ""
-          echo "FFmpeg library:"
-          ls -lh "$VCPKG_ROOT/installed/x64-windows-static/lib/avcodec.lib" || true
-
-          echo ""
-          echo "VCPKG FFmpeg-filer:"
-          find "$VCPKG_ROOT/installed/x64-windows-static/include" \
-            -maxdepth 2 \
-            -type f \
-            \( -name "avcodec.h" -o -name "avformat.h" -o -name "avutil.h" \) || true
-
+          echo "FFmpeg är installerat korrekt."
           echo "=========================================="
 
       # --------------------------------------------------
