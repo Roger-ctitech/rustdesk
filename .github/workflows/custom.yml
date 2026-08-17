@@ -129,14 +129,41 @@ jobs:
           doNotCache: false
 
       # --------------------------------------------------
-      # 10. VCPKG dependencies
+      # 10. Install vcpkg dependencies
       # --------------------------------------------------
       - name: Install vcpkg dependencies
         shell: bash
         run: |
+          echo "=========================================="
+          echo "Installerar vcpkg dependencies"
+          echo "=========================================="
+
           $VCPKG_ROOT/vcpkg install \
-            --triplet x64-windows-static \
+            --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} \
             --x-install-root="$VCPKG_ROOT/installed"
+
+          echo ""
+          echo "=========================================="
+          echo "Kontrollerar FFmpeg"
+          echo "=========================================="
+
+          echo "FFmpeg header:"
+          ls -lh "$VCPKG_ROOT/installed/${{ env.VCPKG_DEFAULT_TRIPLET }}/include/libavcodec/avcodec.h" || true
+
+          echo ""
+          echo "FFmpeg library:"
+          ls -lh "$VCPKG_ROOT/installed/${{ env.VCPKG_DEFAULT_TRIPLET }}/lib/avcodec.lib" || true
+
+          echo ""
+          echo "VCPKG FFmpeg-filer:"
+          find "$VCPKG_ROOT/installed/${{ env.VCPKG_DEFAULT_TRIPLET }}/include" \
+            -maxdepth 2 \
+            -type f \
+            -name "avcodec.h" \
+            -o -name "avformat.h" \
+            -o -name "avutil.h" || true
+
+          echo "=========================================="
 
       # --------------------------------------------------
       # 11. Custom Flutter engine
