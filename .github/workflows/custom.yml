@@ -11,9 +11,10 @@ jobs:
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
 
     steps:
-      - name: Checkout 1.4.8 direkt
+      - name: Checkout official 1.4.8
         uses: actions/checkout@v4
         with:
+          repository: rustdesk/rustdesk
           ref: 1.4.8
           submodules: recursive
           fetch-depth: 0
