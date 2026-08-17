@@ -9,6 +9,9 @@ jobs:
       RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
       RELAY_SERVER: tdisupport.ddns.net:21117
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
     steps:
       - name: Checkout official 1.4.8
@@ -18,6 +21,18 @@ jobs:
           ref: 1.4.8
           submodules: recursive
           fetch-depth: 0
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: 120deac3062162151622ca4860575a33844ba10b
+          doNotCache: false
+
+      - name: Install vcpkg deps
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
