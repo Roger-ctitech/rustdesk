@@ -139,7 +139,7 @@ jobs:
           echo "=========================================="
 
           $VCPKG_ROOT/vcpkg install \
-            --triplet ${{ env.VCPKG_DEFAULT_TRIPLET }} \
+            --triplet x64-windows-static \
             --x-install-root="$VCPKG_ROOT/installed"
 
           echo ""
@@ -148,20 +148,18 @@ jobs:
           echo "=========================================="
 
           echo "FFmpeg header:"
-          ls -lh "$VCPKG_ROOT/installed/${{ env.VCPKG_DEFAULT_TRIPLET }}/include/libavcodec/avcodec.h" || true
+          ls -lh "$VCPKG_ROOT/installed/x64-windows-static/include/libavcodec/avcodec.h" || true
 
           echo ""
           echo "FFmpeg library:"
-          ls -lh "$VCPKG_ROOT/installed/${{ env.VCPKG_DEFAULT_TRIPLET }}/lib/avcodec.lib" || true
+          ls -lh "$VCPKG_ROOT/installed/x64-windows-static/lib/avcodec.lib" || true
 
           echo ""
           echo "VCPKG FFmpeg-filer:"
-          find "$VCPKG_ROOT/installed/${{ env.VCPKG_DEFAULT_TRIPLET }}/include" \
+          find "$VCPKG_ROOT/installed/x64-windows-static/include" \
             -maxdepth 2 \
             -type f \
-            -name "avcodec.h" \
-            -o -name "avformat.h" \
-            -o -name "avutil.h" || true
+            \( -name "avcodec.h" -o -name "avformat.h" -o -name "avutil.h" \) || true
 
           echo "=========================================="
 
