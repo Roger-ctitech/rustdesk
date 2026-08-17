@@ -9,9 +9,6 @@ jobs:
       RENDEZVOUS_SERVER: tdisupport.ddns.net:21116
       RELAY_SERVER: tdisupport.ddns.net:21117
       RS_PUB_KEY: Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA=
-      VCPKG_ROOT: C:\vcpkg
-      VCPKG_DEFAULT_TRIPLET: x64-windows-static
-      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
     steps:
       - uses: actions/checkout@v4
@@ -30,25 +27,15 @@ jobs:
           toolchain: 1.75
           targets: x86_64-pc-windows-msvc
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: C:\vcpkg
-          vcpkgGitCommitId: 120deac3062162151622ca4860575a33844ba10b
-          doNotCache: false
-
-      - name: Install deps
+      - name: Build exe direkt (ingen portable-packer)
         shell: bash
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
-
-      - name: Build portable
-        shell: bash
-        run: |
-          python3 ./build.py --portable
+          cargo build --release --features inline
+          ls -lh target/release/rustdesk.exe
+          cp target/release/rustdesk.exe./Roger-Support.exe
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Roger-Support-Sciter-Windows
-          path: ./rustdesk*.exe
+          name: Roger-Support-Custom
+          path:./Roger-Support.exe
