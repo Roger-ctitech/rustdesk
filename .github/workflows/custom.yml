@@ -196,9 +196,46 @@ jobs:
     steps:
 
       # ------------------------------------------------
-      # 14. Checkout RustDesk 1.4.8
+      # 14. Checkout TELE-DATA repository
       # ------------------------------------------------
-      - name: 14 - Checkout RustDesk 1.4.8
+      - name: 14 - Checkout TELE-DATA repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+
+      # ------------------------------------------------
+      # 15. Save TELE & DATA branding
+      # ------------------------------------------------
+      - name: 15 - Save TELE & DATA branding
+        shell: pwsh
+        run: |
+          Write-Host "=========================================="
+          Write-Host "Sparar TELE & DATA branding"
+          Write-Host "=========================================="
+
+          $source = ".\branding"
+          $backup = Join-Path $env:RUNNER_TEMP "teledata-branding"
+
+          if (-not (Test-Path $source)) {
+            Write-Error "branding-mappen finns inte: $source"
+            exit 1
+          }
+
+          if (Test-Path $backup) {
+            Remove-Item $backup -Recurse -Force
+          }
+
+          Copy-Item $source $backup -Recurse -Force
+
+          Write-Host "Branding sparad till: $backup"
+          Get-ChildItem $backup
+
+
+      # ------------------------------------------------
+      # 16. Checkout RustDesk 1.4.8
+      # ------------------------------------------------
+      - name: 16 - Checkout RustDesk 1.4.8
         uses: actions/checkout@v4
         with:
           repository: rustdesk/rustdesk
@@ -206,19 +243,20 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+
       # ------------------------------------------------
-      # 15. Restore bridge files
+      # 17. Restore bridge files
       # ------------------------------------------------
-      - name: 15 - Restore bridge files
+      - name: 17 - Restore bridge files
         uses: actions/download-artifact@v4
         with:
           name: bridge-artifact
           path: ./
 
       # ------------------------------------------------
-      # 16. Verify bridge files
+      # 18. Verify bridge files
       # ------------------------------------------------
-      - name: 16 - Verify bridge files
+      - name: 18 - Verify bridge files
         shell: pwsh
         run: |
           Write-Host "=========================================="
@@ -245,18 +283,76 @@ jobs:
 
 
       # ------------------------------------------------
-      # 17. Install LLVM
+      # 19. Restore TELE & DATA branding
       # ------------------------------------------------
-      - name: 17 - Install LLVM
+      - name: 19 - Restore TELE & DATA branding
+        shell: pwsh
+        run: |
+          Write-Host "=========================================="
+          Write-Host "Återställer TELE & DATA branding"
+          Write-Host "=========================================="
+
+          $backup = Join-Path $env:RUNNER_TEMP "teledata-branding"
+          $destination = ".\branding"
+
+          if (-not (Test-Path $backup)) {
+            Write-Error "Branding-backup saknas: $backup"
+            exit 1
+          }
+
+          if (Test-Path $destination) {
+            Remove-Item $destination -Recurse -Force
+          }
+
+          Copy-Item $backup $destination -Recurse -Force
+
+          Write-Host "Branding återställd."
+          Get-ChildItem $destination
+
+
+      # ------------------------------------------------
+      # 20. Verify TELE & DATA branding
+      # ------------------------------------------------
+      - name: 20 - Verify TELE & DATA branding
+        shell: pwsh
+        run: |
+          Write-Host "=========================================="
+          Write-Host "Kontrollerar TELE & DATA branding"
+          Write-Host "=========================================="
+
+          $required = @(
+            ".\branding\teledata-logo.png",
+            ".\branding\teledata-logo.svg",
+            ".\branding\teledata-icon.png",
+            ".\branding\teledata-icon.ico",
+            ".\branding\teledata-icon.svg"
+          )
+
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Saknar branding-fil: $file"
+              exit 1
+            }
+
+            Write-Host "OK: $file"
+          }
+
+          Write-Host "Alla TELE & DATA branding-filer finns."
+
+
+      # ------------------------------------------------
+      # 21. Install LLVM
+      # ------------------------------------------------
+      - name: 21 - Install LLVM
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ env.LLVM_VERSION }}
 
 
       # ------------------------------------------------
-      # 18. Install Flutter 3.24.5
+      # 22. Install Flutter 3.24.5
       # ------------------------------------------------
-      - name: 18 - Install Flutter
+      - name: 22 - Install Flutter
         id: flutter
         uses: subosito/flutter-action@v2
         with:
@@ -266,9 +362,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 19. Replace Flutter engine
+      # 23. Replace Flutter engine
       # ------------------------------------------------
-      - name: 19 - Replace Flutter engine
+      - name: 23 - Replace Flutter engine
         shell: pwsh
         run: |
           flutter doctor -v
@@ -312,9 +408,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 20. Patch Flutter
+      # 24. Patch Flutter
       # ------------------------------------------------
-      - name: 20 - Patch Flutter
+      - name: 24 - Patch Flutter
         shell: bash
         run: |
           cp \
@@ -328,9 +424,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 21. Install Rust
+      # 25. Install Rust
       # ------------------------------------------------
-      - name: 21 - Install Rust
+      - name: 25 - Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -339,18 +435,18 @@ jobs:
 
 
       # ------------------------------------------------
-      # 22. Rust cache
+      # 26. Rust cache
       # ------------------------------------------------
-      - name: 22 - Rust cache
+      - name: 26 - Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: rustdesk-1.4.8-windows
 
 
       # ------------------------------------------------
-      # 23. Setup vcpkg
+      # 27. Setup vcpkg
       # ------------------------------------------------
-      - name: 23 - Setup vcpkg
+      - name: 27 - Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: C:\vcpkg
@@ -359,9 +455,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 24. Install vcpkg dependencies
+      # 28. Install vcpkg dependencies
       # ------------------------------------------------
-      - name: 24 - Install vcpkg dependencies
+      - name: 28 - Install vcpkg dependencies
         shell: bash
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
@@ -400,9 +496,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 25. Configure TELE-DATA server
+      # 29. Configure TELE-DATA server
       # ------------------------------------------------
-      - name: 25 - Configure TELE-DATA server
+      - name: 29 - Configure TELE-DATA server
         shell: pwsh
         run: |
           $config = ".\libs\hbb_common\src\config.rs"
@@ -450,9 +546,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 26. Verify server configuration
+      # 30. Verify server configuration
       # ------------------------------------------------
-      - name: 26 - Verify server configuration
+      - name: 30 - Verify server configuration
         shell: pwsh
         run: |
           $config = ".\libs\hbb_common\src\config.rs"
@@ -474,9 +570,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 27. Apply TELE & DATA branding
+      # 31. Apply TELE & DATA branding
       # ------------------------------------------------
-      - name: 27 - Apply TELE & DATA branding
+      - name: 31 - Apply TELE & DATA branding
         shell: pwsh
         run: |
           Write-Host "=========================================="
@@ -559,9 +655,9 @@ jobs:
           Select-String -Path $config -Pattern "APP_NAME"
 
       # ------------------------------------------------
-      # 28. Build RustDesk
+      # 32. Build RustDesk
       # ------------------------------------------------
-      - name: 28 - Build RustDesk
+      - name: 32 - Build RustDesk
         shell: bash
         run: |
           echo "=========================================="
@@ -591,9 +687,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 29. Rename executable
+      # 33. Rename executable
       # ------------------------------------------------
-      - name: 29 - Rename executable
+      - name: 33 - Rename executable
         shell: pwsh
         run: |
           $exe = ".\rustdesk\rustdesk.exe"
@@ -611,9 +707,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 30. Upload final client
+      # 34. Upload final client
       # ------------------------------------------------
-      - name: 30 - Upload tdisupport
+      - name: 34 - Upload tdisupport
         uses: actions/upload-artifact@v4
         with:
           name: tdisupport-Windows-x64
