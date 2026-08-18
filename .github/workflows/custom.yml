@@ -565,7 +565,7 @@ jobs:
         shell: bash
         run: |
           echo "=========================================="
-          echo "BYGGER TDIsupport"
+          echo "BYGGER TELE & DATA Support"
           echo "=========================================="
 
           python3 ./build.py \
