@@ -608,19 +608,30 @@ jobs:
 
           $content = Get-Content $config -Raw
 
+          # Find the actual APP_NAME declaration used by RustDesk 1.4.8.
+          # We replace the complete line instead of depending on the exact
+          # formatting of the declaration.
           $newAppName = 'pub const APP_NAME: &str = "' + $env:APP_NAME + '";'
 
-          $updated = [regex]::Replace(
-            $content,
-            '(?m)^\s*pub const APP_NAME\s*:\s*&str\s*=\s*"[^"]*"\s*;\s*$',
-            $newAppName
-          )
+          $lines = $content -split "`r?`n"
+          $found = $false
 
-          if ($updated -eq $content) {
-            Write-Error "Kunde inte ändra APP_NAME i config.rs"
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^\s*pub\s+const\s+APP_NAME\b') {
+              $lines[$i] = $newAppName
+              $found = $true
+              break
+            }
+          }
+
+          if (-not $found) {
+            Write-Host "APP_NAME-rader som hittades i config.rs:"
+            $lines | Where-Object { $_ -match 'APP_NAME' }
+            Write-Error "Hittade ingen APP_NAME-deklaration i config.rs"
             exit 1
           }
 
+          $updated = $lines -join "`r`n"
           Set-Content -Path $config -Value $updated -Encoding UTF8
 
           # --------------------------------------------
