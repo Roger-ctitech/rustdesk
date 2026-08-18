@@ -11,6 +11,11 @@ env:
   RS_PUB_KEY: "Db+kfSNgJQlup2RHwYBlw0NGBG88P27vPI7V9pFLYxFA="
 
   # ==================================================
+  # 1B. TELE & DATA branding
+  # ==================================================
+  APP_NAME: "TELE & DATA Support"
+
+  # ==================================================
   # 2. RustDesk 1.4.8 build versions
   # ==================================================
   RUSTDESK_VERSION: "1.4.8"
@@ -467,10 +472,96 @@ jobs:
           Write-Host "Serverkonfiguration verifierad."
 
 
+
       # ------------------------------------------------
-      # 27. Build RustDesk
+      # 27. Apply TELE & DATA branding
       # ------------------------------------------------
-      - name: 27 - Build RustDesk
+      - name: 27 - Apply TELE & DATA branding
+        shell: pwsh
+        run: |
+          Write-Host "=========================================="
+          Write-Host "TELE & DATA branding"
+          Write-Host "=========================================="
+
+          $required = @(
+            ".\branding\teledata-logo.png",
+            ".\branding\teledata-logo.svg",
+            ".\branding\teledata-icon.png",
+            ".\branding\teledata-icon.ico",
+            ".\branding\teledata-icon.svg"
+          )
+
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Saknar branding-fil: $file"
+              Write-Error "Lägg filerna i mappen branding/ i GitHub-repot."
+              exit 1
+            }
+            Write-Host "OK: $file"
+          }
+
+          # --------------------------------------------
+          # 27A. Application name
+          # --------------------------------------------
+          $config = ".\libs\hbb_common\src\config.rs"
+
+          if (-not (Test-Path $config)) {
+            Write-Error "Hittar inte $config"
+            exit 1
+          }
+
+          $content = Get-Content $config -Raw
+
+          $newAppName = 'pub const APP_NAME: &str = "' + $env:APP_NAME + '";'
+
+          $updated = [regex]::Replace(
+            $content,
+            '(?m)^\s*pub const APP_NAME\s*:\s*&str\s*=\s*"[^"]*"\s*;\s*$',
+            $newAppName
+          )
+
+          if ($updated -eq $content) {
+            Write-Error "Kunde inte ändra APP_NAME i config.rs"
+            exit 1
+          }
+
+          Set-Content -Path $config -Value $updated -Encoding UTF8
+
+          # --------------------------------------------
+          # 27B. Main logo used by the Flutter client
+          # --------------------------------------------
+          Copy-Item ".\branding\teledata-logo.png" ".\flutter\assets\logo.png" -Force
+          Copy-Item ".\branding\teledata-logo.svg" ".\flutter\assets\logo.svg" -Force
+
+          # --------------------------------------------
+          # 27C. Windows / tray icons
+          # --------------------------------------------
+          Copy-Item ".\branding\teledata-icon.png" ".\res\icon.png" -Force
+          Copy-Item ".\branding\teledata-icon.ico" ".\res\icon.ico" -Force
+          Copy-Item ".\branding\teledata-icon.ico" ".\flutter\assets\logo.ico" -Force
+          Copy-Item ".\branding\teledata-icon.svg" ".\flutter\assets\icon.svg" -Force
+          Copy-Item ".\branding\teledata-icon.svg" ".\res\scalable.svg" -Force
+
+          $runnerIcon = ".\flutter\windows\runner\resources\app_icon.ico"
+          if (Test-Path $runnerIcon) {
+            Copy-Item ".\branding\teledata-icon.ico" $runnerIcon -Force
+            Write-Host "OK: Windows runner icon ersatt."
+          } else {
+            Write-Host "OBS: $runnerIcon finns inte i denna RustDesk-version."
+          }
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "Branding klar"
+          Write-Host "App name: $env:APP_NAME"
+          Write-Host "=========================================="
+
+          Select-String -Path $config -Pattern "APP_NAME"
+
+      # ------------------------------------------------
+      # 28. Build RustDesk
+      # ------------------------------------------------
+      - name: 28 - Build RustDesk
         shell: bash
         run: |
           echo "=========================================="
@@ -500,9 +591,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 28. Rename executable
+      # 29. Rename executable
       # ------------------------------------------------
-      - name: 28 - Rename executable
+      - name: 29 - Rename executable
         shell: pwsh
         run: |
           $exe = ".\rustdesk\rustdesk.exe"
@@ -520,9 +611,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 29. Upload final client
+      # 30. Upload final client
       # ------------------------------------------------
-      - name: 29 - Upload tdisupport
+      - name: 30 - Upload tdisupport
         uses: actions/upload-artifact@v4
         with:
           name: tdisupport-Windows-x64
