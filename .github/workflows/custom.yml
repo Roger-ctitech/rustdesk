@@ -608,31 +608,27 @@ jobs:
 
           $content = Get-Content $config -Raw
 
-          # Find the actual APP_NAME declaration used by RustDesk 1.4.8.
-          # We replace the complete line instead of depending on the exact
-          # formatting of the declaration.
-          $newAppName = 'pub const APP_NAME: &str = "' + $env:APP_NAME + '";'
+          # RustDesk 1.4.8 uses:
+          # pub static ref APP_NAME: RwLock<String> = RwLock::new("RustDesk".to_owned());
+          # Replace only the default string inside the existing declaration.
+          $pattern = '(?m)(pub\s+static\s+ref\s+APP_NAME\s*:\s*RwLock<String>\s*=\s*RwLock::new\(")[^"]*(".*?\);)'
 
-          $lines = $content -split "`r?`n"
-          $found = $false
+          $updated = [regex]::Replace(
+            $content,
+            $pattern,
+            '$1' + $env:APP_NAME + '$2'
+          )
 
-          for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i] -match '^\s*pub\s+const\s+APP_NAME\b') {
-              $lines[$i] = $newAppName
-              $found = $true
-              break
-            }
-          }
-
-          if (-not $found) {
+          if ($updated -eq $content) {
             Write-Host "APP_NAME-rader som hittades i config.rs:"
-            $lines | Where-Object { $_ -match 'APP_NAME' }
+            $content -split "`r?`n" | Where-Object { $_ -match 'APP_NAME' }
             Write-Error "Hittade ingen APP_NAME-deklaration i config.rs"
             exit 1
           }
 
-          $updated = $lines -join "`r`n"
           Set-Content -Path $config -Value $updated -Encoding UTF8
+
+          Write-Host "APP_NAME ändrad till: $env:APP_NAME"
 
           # --------------------------------------------
           # 27B. Main logo used by the Flutter client
