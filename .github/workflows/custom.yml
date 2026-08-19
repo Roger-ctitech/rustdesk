@@ -780,7 +780,8 @@ jobs:
           @(
             ';!@Install@!UTF-8!'
             'Title="TELE & DATA Support"'
-            'RunProgram="tdisupport.exe"'
+            'Progress="no"'
+            'RunProgram="%%T\tdisupport.exe"'
             ';!@InstallEnd@!'
           ) | Set-Content -Path $config -Encoding ASCII
 
