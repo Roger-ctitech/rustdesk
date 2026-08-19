@@ -714,10 +714,92 @@ jobs:
 
 
       # ------------------------------------------------
-      # 34. Upload final client
+      # 34. Create ONE self-extracting EXE for the customer
       # ------------------------------------------------
-      - name: 34 - Upload tdisupport
+      - name: 34 - Create customer EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "=========================================="
+          Write-Host "SKAPAR EN FIL FÖR KUNDEN"
+          Write-Host "TELE-DATA-Support.exe"
+          Write-Host "=========================================="
+
+          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) {
+            Write-Error "7-Zip hittades inte på GitHub-runnern."
+            exit 1
+          }
+
+          $work = Join-Path $env:RUNNER_TEMP "tdisupport-sfx"
+          $payload = Join-Path $work "payload.7z"
+          $sfx = Join-Path $work "7zS.sfx"
+          $config = Join-Path $work "config.txt"
+          $output = Join-Path $env:GITHUB_WORKSPACE "TELE-DATA-Support.exe"
+
+          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $work | Out-Null
+
+          # Official 7-Zip Extra package contains the Windows SFX modules.
+          $extra = Join-Path $work "7z-extra.7z"
+          Invoke-WebRequest `
+            -Uri "https://www.7-zip.org/a/7z2602-extra.7z" `
+            -OutFile $extra
+
+          $extraDir = Join-Path $work "extra"
+          New-Item -ItemType Directory -Path $extraDir | Out-Null
+          & $sevenZip x $extra "-o$extraDir" -y | Out-Host
+
+          $sfxCandidates = @(
+            (Join-Path $extraDir "7zS.sfx"),
+            (Join-Path $extraDir "7z.sfx"),
+            (Join-Path $extraDir "x64\7zS.sfx"),
+            (Join-Path $extraDir "x64\7z.sfx")
+          )
+
+          $sfxSource = $sfxCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $sfxSource) {
+            Write-Host "Sökvägar i 7-Zip Extra:"
+            Get-ChildItem $extraDir -Recurse | Select-Object FullName | Format-Table -AutoSize
+            Write-Error "Hittade ingen 7zS.sfx/7z.sfx."
+            exit 1
+          }
+
+          Copy-Item $sfxSource $sfx -Force
+
+          # Package the complete portable RustDesk directory.
+          & $sevenZip a -t7z -mx=9 $payload ".\rustdesk\*" | Out-Host
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Official installer SFX: extract to a temporary directory and run the client.
+          # %%T is replaced by the SFX with the temporary extraction directory.
+          @'
+;!@Install@!UTF-8!
+Title="TELE & DATA Support"
+RunProgram="tdisupport.exe"
+;!@InstallEnd@!
+'@ | Set-Content -Path $config -Encoding UTF8
+
+          # Assemble SFX + configuration + 7z payload into one EXE.
+          cmd /c "copy /b `"$sfx`"+`"$config`"+`"$payload`" `"$output`""
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          if (-not (Test-Path $output)) {
+            Write-Error "TELE-DATA-Support.exe skapades inte."
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "FÄRDIG KUND-FIL:"
+          Get-Item $output | Select-Object Name, Length, FullName
+
+
+      # ------------------------------------------------
+      # 35. Upload ONE customer EXE
+      # ------------------------------------------------
+      - name: 35 - Upload customer EXE
         uses: actions/upload-artifact@v4
         with:
-          name: tdisupport-Windows-x64
-          path: ./rustdesk/
+          name: TELE-DATA-Support-Windows-x64
+          path: ./TELE-DATA-Support.exe
