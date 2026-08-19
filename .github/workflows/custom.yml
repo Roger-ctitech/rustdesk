@@ -741,32 +741,34 @@ jobs:
           Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $work | Out-Null
 
-          # Official 7-Zip Extra package contains the Windows SFX modules.
-          $extra = Join-Path $work "7z-extra.7z"
+          # The current 7-Zip Extra package does not provide the GUI SFX
+          # module we need. Get the official 7-Zip x64 installer instead.
+          # The installer contains 7z.sfx.
+          $installer = Join-Path $work "7z2602-x64.exe"
           Invoke-WebRequest `
-            -Uri "https://www.7-zip.org/a/7z2602-extra.7z" `
-            -OutFile $extra
+            -Uri "https://www.7-zip.org/a/7z2602-x64.exe" `
+            -OutFile $installer
 
-          $extraDir = Join-Path $work "extra"
-          New-Item -ItemType Directory -Path $extraDir | Out-Null
-          & $sevenZip x $extra "-o$extraDir" -y | Out-Host
+          $installerDir = Join-Path $work "installer"
+          New-Item -ItemType Directory -Path $installerDir | Out-Null
 
-          $sfxCandidates = @(
-            (Join-Path $extraDir "7zS.sfx"),
-            (Join-Path $extraDir "7z.sfx"),
-            (Join-Path $extraDir "x64\7zS.sfx"),
-            (Join-Path $extraDir "x64\7z.sfx")
-          )
+          & $sevenZip x $installer "-o$installerDir" -y | Out-Host
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          $sfxSource = $sfxCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $sfxSource = Get-ChildItem $installerDir -Recurse -Filter "7z.sfx" |
+            Select-Object -First 1
+
           if (-not $sfxSource) {
-            Write-Host "Sökvägar i 7-Zip Extra:"
-            Get-ChildItem $extraDir -Recurse | Select-Object FullName | Format-Table -AutoSize
-            Write-Error "Hittade ingen 7zS.sfx/7z.sfx."
+            Write-Host "Filer från 7-Zip-installern:"
+            Get-ChildItem $installerDir -Recurse |
+              Select-Object FullName |
+              Format-Table -AutoSize
+            Write-Error "Hittade ingen 7z.sfx i 7-Zip-installern."
             exit 1
           }
 
-          Copy-Item $sfxSource $sfx -Force
+          Copy-Item $sfxSource.FullName $sfx -Force
+          Write-Host "Hittade SFX-modul: $($sfxSource.FullName)"
 
           # Package the complete portable RustDesk directory.
           & $sevenZip a -t7z -mx=9 $payload ".\rustdesk\*" | Out-Host
