@@ -773,13 +773,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           # Official installer SFX: extract to a temporary directory and run the client.
-          # %%T is replaced by the SFX with the temporary extraction directory.
-          @'
-;!@Install@!UTF-8!
-Title="TELE & DATA Support"
-RunProgram="tdisupport.exe"
-;!@InstallEnd@!
-'@ | Set-Content -Path $config -Encoding UTF8
+          # Build the SFX configuration without a PowerShell here-string,
+          # so the YAML remains valid.
+          @(
+            ';!@Install@!UTF-8!'
+            'Title="TELE & DATA Support"'
+            'RunProgram="tdisupport.exe"'
+            ';!@InstallEnd@!'
+          ) | Set-Content -Path $config -Encoding ASCII
 
           # Assemble SFX + configuration + 7z payload into one EXE.
           cmd /c "copy /b `"$sfx`"+`"$config`"+`"$payload`" `"$output`""
