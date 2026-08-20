@@ -721,9 +721,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host "=========================================="
-          Write-Host "INSTALLERAR INNO SETUP 7"
-          Write-Host "=========================================="
+          Write-Host "Installerar Inno Setup 7..."
 
           $installer = Join-Path $env:RUNNER_TEMP "innosetup-7.0.2-x64.exe"
 
@@ -744,40 +742,31 @@ jobs:
             exit 1
           }
 
-          Write-Host "Installerar Inno Setup..."
-
           Start-Process `
             -FilePath $installer `
             -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS" `
             -Wait `
             -NoNewWindow
 
-          Write-Host "Letar efter ISCC.exe..."
-
-          $possiblePaths = @(
+          $possibleIscc = @(
             "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
             "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
             "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
           )
 
           $iscc = $null
-
-          foreach ($path in $possiblePaths) {
-            if ($path -and (Test-Path $path)) {
-              $iscc = $path
+          foreach ($candidate in $possibleIscc) {
+            if ($candidate -and (Test-Path $candidate)) {
+              $iscc = $candidate
               break
             }
           }
 
           if (-not $iscc) {
-            Write-Host "ISCC.exe hittades inte på standardplatserna."
-            Write-Host "Söker på hela runnern..."
-
+            Write-Host "Letar efter ISCC.exe..."
             $found = Get-ChildItem `
               -Path "C:\Program Files","C:\Program Files (x86)",$env:LOCALAPPDATA `
-              -Recurse `
-              -Filter "ISCC.exe" `
-              -ErrorAction SilentlyContinue |
+              -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
               Select-Object -First 1
 
             if ($found) {
@@ -790,11 +779,7 @@ jobs:
             exit 1
           }
 
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "INNO SETUP HITTADES"
-          Write-Host "$iscc"
-          Write-Host "=========================================="
+          Write-Host "Hittade ISCC: $iscc"
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
@@ -809,7 +794,19 @@ jobs:
           Write-Host "TELE-DATA-Support.exe"
           Write-Host "=========================================="
 
-          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          $possibleIscc = @(
+            "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
+          )
+
+          $iscc = $possibleIscc | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+          if (-not $iscc) {
+            Write-Error "ISCC.exe hittades inte."
+            exit 1
+          }
+
           $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
           $script = Join-Path $work "TELE-DATA-Support.iss"
           $outputDir = Join-Path $env:GITHUB_WORKSPACE "customer-exe"
@@ -828,21 +825,25 @@ jobs:
 
           $iss = @(
             '[Setup]'
+            'AppId={{8E0A1C7D-2F4A-4C92-9D11-5F8B2C6A73E4}'
             'AppName=TELE & DATA Support'
-            'AppVersion=1.0'
-            'DefaultDirName={localappdata}\TELE-DATA Support'
+            'AppVersion=1.0.0'
+            'AppPublisher=TELE & DATA Integration Sweden AB'
+            'DefaultDirName={autopf}\TELE-DATA Support'
             'DisableProgramGroupPage=yes'
             'DisableDirPage=yes'
             'DisableReadyPage=yes'
             'DisableFinishedPage=yes'
-            'Uninstallable=no'
-            'PrivilegesRequired=lowest'
+            'Uninstallable=yes'
+            'PrivilegesRequired=admin'
             'OutputDir=' + $outputDir
             'OutputBaseFilename=TELE-DATA-Support'
             'Compression=lzma2'
             'SolidCompression=yes'
             'WizardStyle=modern'
             'SetupArchitecture=x64'
+            'UninstallDisplayIcon={app}\tdisupport.exe'
+            'UninstallDisplayName=TELE & DATA Support'
             ''
             '[Files]'
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
