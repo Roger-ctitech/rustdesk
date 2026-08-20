@@ -714,35 +714,54 @@ jobs:
 
 
       # ------------------------------------------------
-      # 34. Install Inno Setup
+      # 34. Install Inno Setup 7
       # ------------------------------------------------
-      - name: 34 - Install Inno Setup
+      - name: 34 - Install Inno Setup 7
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host "Installerar Inno Setup..."
+          Write-Host "Installerar Inno Setup 7..."
 
-          $installer = Join-Path $env:RUNNER_TEMP "innosetup.exe"
+          $installer = Join-Path $env:RUNNER_TEMP "innosetup-7.0.2-x64.exe"
 
+          # Official Inno Setup 7 x64 installer.
           Invoke-WebRequest `
-            -Uri "https://jrsoftware.org/download.php/is.exe" `
+            -Uri "https://files.jrsoftware.org/is/7/innosetup-7.0.2-x64.exe" `
             -OutFile $installer
 
-          Start-Process `
-            -FilePath $installer `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" `
-            -Wait `
-            -NoNewWindow
-
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-
-          if (-not (Test-Path $iscc)) {
-            Write-Error "Inno Setup ISCC.exe hittades inte."
+          if (-not (Test-Path $installer)) {
+            Write-Error "Inno Setup-installern laddades inte ner."
             exit 1
           }
 
-          Write-Host "Inno Setup installerat."
+          $size = (Get-Item $installer).Length
+          Write-Host "Nedladdad installer: $size bytes"
+
+          if ($size -lt 1000000) {
+            Write-Error "Inno Setup-installern verkar vara felaktig eller ofullständig."
+            exit 1
+          }
+
+          Start-Process `
+            -FilePath $installer `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER" `
+            -Wait `
+            -NoNewWindow
+
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+
+          if (-not (Test-Path $iscc)) {
+            Write-Host "Letar efter ISCC.exe..."
+            Get-ChildItem "${env:ProgramFiles}" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
+              Select-Object FullName |
+              Format-Table -AutoSize
+            Write-Error "Inno Setup 7 ISCC.exe hittades inte."
+            exit 1
+          }
+
+          Write-Host "Hittade ISCC: $iscc"
+
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
@@ -757,10 +776,11 @@ jobs:
           Write-Host "TELE-DATA-Support.exe"
           Write-Host "=========================================="
 
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
           $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
           $script = Join-Path $work "TELE-DATA-Support.iss"
           $outputDir = Join-Path $env:GITHUB_WORKSPACE "customer-exe"
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "rustdesk"
 
           Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item $outputDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -768,10 +788,8 @@ jobs:
           New-Item -ItemType Directory -Path $work | Out-Null
           New-Item -ItemType Directory -Path $outputDir | Out-Null
 
-          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "rustdesk"
-
           if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
-            Write-Error "tdisupport.exe saknas i den fungerande RustDesk-klienten."
+            Write-Error "tdisupport.exe saknas i RustDesk-klienten."
             exit 1
           }
 
@@ -791,6 +809,7 @@ jobs:
             'Compression=lzma2'
             'SolidCompression=yes'
             'WizardStyle=modern'
+            'SetupArchitecture=x64compatible'
             ''
             '[Files]'
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
@@ -805,7 +824,7 @@ jobs:
             (New-Object System.Text.UTF8Encoding($false))
           )
 
-          Write-Host "Kompilerar Inno Setup..."
+          Write-Host "Kompilerar installer..."
           & $iscc $script
 
           if ($LASTEXITCODE -ne 0) {
@@ -824,6 +843,7 @@ jobs:
           Write-Host "FÄRDIG KUND-FIL"
           Write-Host "=========================================="
           Get-Item $output | Select-Object Name, Length, FullName
+
 
       # ------------------------------------------------
       # 36. Upload ONE customer EXE
