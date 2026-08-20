@@ -777,13 +777,19 @@ jobs:
           # Official installer SFX: extract to a temporary directory and run the client.
           # Build the SFX configuration without a PowerShell here-string,
           # so the YAML remains valid.
-          @(
+                    $configText = @(
             ';!@Install@!UTF-8!'
             'Title="TELE & DATA Support"'
             'Progress="no"'
-            'RunProgram="%%T\tdisupport.exe"'
+            'RunProgram="%%T\\tdisupport.exe"'
             ';!@InstallEnd@!'
-          ) | Set-Content -Path $config -Encoding ASCII
+          ) -join "`r`n"
+
+          [System.IO.File]::WriteAllText(
+            $config,
+            $configText,
+            (New-Object System.Text.UTF8Encoding($false))
+          )
 
           # Assemble SFX + configuration + 7z payload into one EXE.
           cmd /c "copy /b `"$sfx`"+`"$config`"+`"$payload`" `"$output`""
