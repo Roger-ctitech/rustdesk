@@ -721,7 +721,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host "Installerar Inno Setup 7..."
+          Write-Host "=========================================="
+          Write-Host "INSTALLERAR INNO SETUP 7"
+          Write-Host "=========================================="
 
           $installer = Join-Path $env:RUNNER_TEMP "innosetup-7.0.2-x64.exe"
 
@@ -742,25 +744,57 @@ jobs:
             exit 1
           }
 
+          Write-Host "Installerar Inno Setup..."
+
           Start-Process `
             -FilePath $installer `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER" `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS" `
             -Wait `
             -NoNewWindow
 
-          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          Write-Host "Letar efter ISCC.exe..."
 
-          if (-not (Test-Path $iscc)) {
-            Write-Host "Letar efter ISCC.exe..."
-            Get-ChildItem "${env:ProgramFiles}" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
-              Select-Object FullName |
-              Format-Table -AutoSize
+          $possiblePaths = @(
+            "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
+          )
 
+          $iscc = $null
+
+          foreach ($path in $possiblePaths) {
+            if ($path -and (Test-Path $path)) {
+              $iscc = $path
+              break
+            }
+          }
+
+          if (-not $iscc) {
+            Write-Host "ISCC.exe hittades inte på standardplatserna."
+            Write-Host "Söker på hela runnern..."
+
+            $found = Get-ChildItem `
+              -Path "C:\Program Files","C:\Program Files (x86)",$env:LOCALAPPDATA `
+              -Recurse `
+              -Filter "ISCC.exe" `
+              -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+
+            if ($found) {
+              $iscc = $found.FullName
+            }
+          }
+
+          if (-not $iscc) {
             Write-Error "Inno Setup 7 ISCC.exe hittades inte."
             exit 1
           }
 
-          Write-Host "Hittade ISCC: $iscc"
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "INNO SETUP HITTADES"
+          Write-Host "$iscc"
+          Write-Host "=========================================="
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
