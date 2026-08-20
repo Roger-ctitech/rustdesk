@@ -725,9 +725,8 @@ jobs:
 
           $installer = Join-Path $env:RUNNER_TEMP "innosetup-7.0.2-x64.exe"
 
-          # Official Inno Setup 7 x64 installer.
           Invoke-WebRequest `
-            -Uri "https://files.jrsoftware.org/is/7/innosetup-7.0.2-x64.exe" `
+            -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_0_2/innosetup-7.0.2-x64.exe" `
             -OutFile $installer
 
           if (-not (Test-Path $installer)) {
@@ -756,12 +755,12 @@ jobs:
             Get-ChildItem "${env:ProgramFiles}" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
               Select-Object FullName |
               Format-Table -AutoSize
+
             Write-Error "Inno Setup 7 ISCC.exe hittades inte."
             exit 1
           }
 
           Write-Host "Hittade ISCC: $iscc"
-
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
@@ -809,7 +808,7 @@ jobs:
             'Compression=lzma2'
             'SolidCompression=yes'
             'WizardStyle=modern'
-            'SetupArchitecture=x64compatible'
+            'SetupArchitecture=x64'
             ''
             '[Files]'
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
@@ -839,11 +838,8 @@ jobs:
           }
 
           Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "FÄRDIG KUND-FIL"
-          Write-Host "=========================================="
+          Write-Host "FÄRDIG KUND-FIL:"
           Get-Item $output | Select-Object Name, Length, FullName
-
 
       # ------------------------------------------------
       # 36. Upload ONE customer EXE
