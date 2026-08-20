@@ -714,9 +714,40 @@ jobs:
 
 
       # ------------------------------------------------
-      # 34. Create ONE self-extracting EXE for the customer
+      # 34. Install Inno Setup
       # ------------------------------------------------
-      - name: 34 - Create customer EXE
+      - name: 34 - Install Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "Installerar Inno Setup..."
+
+          $installer = Join-Path $env:RUNNER_TEMP "innosetup.exe"
+
+          Invoke-WebRequest `
+            -Uri "https://jrsoftware.org/download.php/is.exe" `
+            -OutFile $installer
+
+          Start-Process `
+            -FilePath $installer `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" `
+            -Wait `
+            -NoNewWindow
+
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          if (-not (Test-Path $iscc)) {
+            Write-Error "Inno Setup ISCC.exe hittades inte."
+            exit 1
+          }
+
+          Write-Host "Inno Setup installerat."
+
+      # ------------------------------------------------
+      # 35. Create ONE TELE & DATA customer EXE
+      # ------------------------------------------------
+      - name: 35 - Create TELE & DATA Support EXE
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -726,74 +757,62 @@ jobs:
           Write-Host "TELE-DATA-Support.exe"
           Write-Host "=========================================="
 
-          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
-          if (-not (Test-Path $sevenZip)) {
-            Write-Error "7-Zip hittades inte på GitHub-runnern."
-            exit 1
-          }
-
-          $work = Join-Path $env:RUNNER_TEMP "tdisupport-sfx"
-          $payload = Join-Path $work "payload.7z"
-          $sfx = Join-Path $work "7zS.sfx"
-          $config = Join-Path $work "config.txt"
-          $output = Join-Path $env:GITHUB_WORKSPACE "TELE-DATA-Support.exe"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
+          $script = Join-Path $work "TELE-DATA-Support.iss"
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE "customer-exe"
 
           Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $outputDir -Recurse -Force -ErrorAction SilentlyContinue
+
           New-Item -ItemType Directory -Path $work | Out-Null
+          New-Item -ItemType Directory -Path $outputDir | Out-Null
 
-          # The current 7-Zip Extra package does not provide the GUI SFX
-          # module we need. Get the official 7-Zip x64 installer instead.
-          # The installer contains 7z.sfx.
-          $installer = Join-Path $work "7z2602-x64.exe"
-          Invoke-WebRequest `
-            -Uri "https://www.7-zip.org/a/7z2602-x64.exe" `
-            -OutFile $installer
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "rustdesk"
 
-          $installerDir = Join-Path $work "installer"
-          New-Item -ItemType Directory -Path $installerDir | Out-Null
-
-          & $sevenZip x $installer "-o$installerDir" -y | Out-Host
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          $sfxSource = Get-ChildItem $installerDir -Recurse -Filter "7z.sfx" |
-            Select-Object -First 1
-
-          if (-not $sfxSource) {
-            Write-Host "Filer från 7-Zip-installern:"
-            Get-ChildItem $installerDir -Recurse |
-              Select-Object FullName |
-              Format-Table -AutoSize
-            Write-Error "Hittade ingen 7z.sfx i 7-Zip-installern."
+          if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
+            Write-Error "tdisupport.exe saknas i den fungerande RustDesk-klienten."
             exit 1
           }
 
-          Copy-Item $sfxSource.FullName $sfx -Force
-          Write-Host "Hittade SFX-modul: $($sfxSource.FullName)"
-
-          # Package the complete portable RustDesk directory.
-          & $sevenZip a -t7z -mx=9 $payload ".\rustdesk\*" | Out-Host
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          # Official installer SFX: extract to a temporary directory and run the client.
-          # Build the SFX configuration without a PowerShell here-string,
-          # so the YAML remains valid.
-                    $configText = @(
-            ';!@Install@!UTF-8!'
-            'Title="TELE & DATA Support"'
-            'Progress="no"'
-            'RunProgram="%%T\\tdisupport.exe"'
-            ';!@InstallEnd@!'
+          $iss = @(
+            '[Setup]'
+            'AppName=TELE & DATA Support'
+            'AppVersion=1.0'
+            'DefaultDirName={localappdata}\TELE-DATA Support'
+            'DisableProgramGroupPage=yes'
+            'DisableDirPage=yes'
+            'DisableReadyPage=yes'
+            'DisableFinishedPage=yes'
+            'Uninstallable=no'
+            'PrivilegesRequired=lowest'
+            'OutputDir=' + $outputDir
+            'OutputBaseFilename=TELE-DATA-Support'
+            'Compression=lzma2'
+            'SolidCompression=yes'
+            'WizardStyle=modern'
+            ''
+            '[Files]'
+            'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
+            ''
+            '[Run]'
+            'Filename: "{app}\tdisupport.exe"; Flags: nowait'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
-            $config,
-            $configText,
+            $script,
+            $iss,
             (New-Object System.Text.UTF8Encoding($false))
           )
 
-          # Assemble SFX + configuration + 7z payload into one EXE.
-          cmd /c "copy /b `"$sfx`"+`"$config`"+`"$payload`" `"$output`""
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "Kompilerar Inno Setup..."
+          & $iscc $script
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $output = Join-Path $outputDir "TELE-DATA-Support.exe"
 
           if (-not (Test-Path $output)) {
             Write-Error "TELE-DATA-Support.exe skapades inte."
@@ -801,15 +820,16 @@ jobs:
           }
 
           Write-Host ""
-          Write-Host "FÄRDIG KUND-FIL:"
+          Write-Host "=========================================="
+          Write-Host "FÄRDIG KUND-FIL"
+          Write-Host "=========================================="
           Get-Item $output | Select-Object Name, Length, FullName
 
-
       # ------------------------------------------------
-      # 35. Upload ONE customer EXE
+      # 36. Upload ONE customer EXE
       # ------------------------------------------------
-      - name: 35 - Upload customer EXE
+      - name: 36 - Upload TELE-DATA Support EXE
         uses: actions/upload-artifact@v4
         with:
           name: TELE-DATA-Support-Windows-x64
-          path: ./TELE-DATA-Support.exe
+          path: ./customer-exe/TELE-DATA-Support.exe
