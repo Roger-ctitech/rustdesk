@@ -790,8 +790,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           Write-Host "=========================================="
-          Write-Host "SKAPAR EN FIL FÖR KUNDEN"
-          Write-Host "TELE-DATA-Support.exe"
+          Write-Host "SKAPAR TELE & DATA SUPPORT INSTALLER"
           Write-Host "=========================================="
 
           $possibleIscc = @(
@@ -800,12 +799,16 @@ jobs:
             "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
           )
 
-          $iscc = $possibleIscc | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $iscc = $possibleIscc |
+            Where-Object { $_ -and (Test-Path $_) } |
+            Select-Object -First 1
 
           if (-not $iscc) {
             Write-Error "ISCC.exe hittades inte."
             exit 1
           }
+
+          Write-Host "Hittade ISCC: $iscc"
 
           $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
           $script = Join-Path $work "TELE-DATA-Support.iss"
@@ -818,10 +821,14 @@ jobs:
           New-Item -ItemType Directory -Path $work | Out-Null
           New-Item -ItemType Directory -Path $outputDir | Out-Null
 
-          if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
+          $client = Join-Path $sourceDir "tdisupport.exe"
+
+          if (-not (Test-Path $client)) {
             Write-Error "tdisupport.exe saknas i RustDesk-klienten."
             exit 1
           }
+
+          Write-Host "Hittade klient: $client"
 
           $iss = @(
             '[Setup]'
@@ -848,8 +855,12 @@ jobs:
             '[Files]'
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
+            '[Icons]'
+            'Name: "{autodesktop}\TELE & DATA Support"; Filename: "{app}\tdisupport.exe"; WorkingDir: "{app}"'
+            'Name: "{autoprograms}\TELE & DATA Support"; Filename: "{app}\tdisupport.exe"; WorkingDir: "{app}"'
+            ''
             '[Run]'
-            'Filename: "{app}\tdisupport.exe"; Flags: nowait'
+            'Filename: "{app}\tdisupport.exe"; Description: "Starta TELE & DATA Support"; Flags: nowait postinstall skipifsilent'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
@@ -859,6 +870,7 @@ jobs:
           )
 
           Write-Host "Kompilerar installer..."
+
           & $iscc $script
 
           if ($LASTEXITCODE -ne 0) {
@@ -873,8 +885,12 @@ jobs:
           }
 
           Write-Host ""
-          Write-Host "FÄRDIG KUND-FIL:"
-          Get-Item $output | Select-Object Name, Length, FullName
+          Write-Host "=========================================="
+          Write-Host "FÄRDIG KUND-FIL"
+          Write-Host "=========================================="
+
+          Get-Item $output |
+            Select-Object Name, Length, FullName
 
       # ------------------------------------------------
       # 36. Upload ONE customer EXE
