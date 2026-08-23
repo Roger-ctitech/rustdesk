@@ -764,6 +764,7 @@ jobs:
 
           if (-not $iscc) {
             Write-Host "Letar efter ISCC.exe..."
+
             $found = Get-ChildItem `
               -Path "C:\Program Files","C:\Program Files (x86)",$env:LOCALAPPDATA `
               -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
@@ -781,6 +782,7 @@ jobs:
 
           Write-Host "Hittade ISCC: $iscc"
 
+
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
       # ------------------------------------------------
@@ -790,7 +792,8 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           Write-Host "=========================================="
-          Write-Host "SKAPAR TELE & DATA SUPPORT INSTALLER"
+          Write-Host "SKAPAR EN FIL FÖR KUNDEN"
+          Write-Host "TELE-DATA-Support.exe"
           Write-Host "=========================================="
 
           $possibleIscc = @(
@@ -820,7 +823,7 @@ jobs:
           New-Item -ItemType Directory -Path $outputDir | Out-Null
 
           if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
-            Write-Error "tdisupport.exe saknas."
+            Write-Error "tdisupport.exe saknas i RustDesk-klienten."
             exit 1
           }
 
@@ -842,26 +845,15 @@ jobs:
             'Compression=lzma2'
             'SolidCompression=yes'
             'WizardStyle=modern'
-            'ArchitecturesInstallIn64BitMode=x64'
-            'UninstallDisplayIcon={app}\TELE & DATA Support.exe'
+            'SetupArchitecture=x64'
+            'UninstallDisplayIcon={app}\tdisupport.exe'
             'UninstallDisplayName=TELE & DATA Support'
             ''
             '[Files]'
-            'Source: "' + (Join-Path $sourceDir "tdisupport.exe") + '"; DestDir: "{app}"; DestName: "TELE & DATA Support.exe"; Flags: ignoreversion'
-            'Source: "' + (Join-Path $sourceDir "*") + '"; DestDir: "{app}"; Excludes: "tdisupport.exe"; Flags: recursesubdirs createallsubdirs ignoreversion'
-            ''
-            '[Icons]'
-            'Name: "{autodesktop}\TELE & DATA Support"; Filename: "{app}\TELE & DATA Support.exe"'
-            'Name: "{autoprograms}\TELE & DATA Support"; Filename: "{app}\TELE & DATA Support.exe"'
+            'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
-            'Filename: "{cmd}"; Parameters: "/C sc.exe create ""TELE & DATA Support"" binPath= """"""{app}\TELE & DATA Support.exe"""" --service"" start= auto DisplayName= ""TELE & DATA Support Service"""; Flags: runhidden waituntilterminated'
-            'Filename: "{cmd}"; Parameters: "/C sc.exe start ""TELE & DATA Support"""; Flags: runhidden waituntilterminated'
-            'Filename: "{app}\TELE & DATA Support.exe"; Flags: nowait'
-            ''
-            '[UninstallRun]'
-            'Filename: "{cmd}"; Parameters: "/C sc.exe stop ""TELE & DATA Support"""; Flags: runhidden waituntilterminated'
-            'Filename: "{cmd}"; Parameters: "/C sc.exe delete ""TELE & DATA Support"""; Flags: runhidden waituntilterminated'
+            'Filename: "{app}\tdisupport.exe"; Flags: nowait'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
@@ -884,9 +876,10 @@ jobs:
             exit 1
           }
 
+          Write-Host ""
           Write-Host "FÄRDIG KUND-FIL:"
-          Get-Item $output |
-            Select-Object Name, Length, FullName
+          Get-Item $output | Select-Object Name, Length, FullName
+
 
       # ------------------------------------------------
       # 36. Upload ONE customer EXE
@@ -895,4 +888,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TELE-DATA-Support-Windows-x64
+          path: ./customer-exe/TELE-DATA-Support.exe
           path: ./customer-exe/TELE-DATA-Support.exe
