@@ -820,13 +820,10 @@ jobs:
           New-Item -ItemType Directory -Path $outputDir | Out-Null
 
           if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
-            Write-Error "tdisupport.exe saknas i RustDesk-klienten."
+            Write-Error "tdisupport.exe saknas."
             exit 1
           }
 
-          # ------------------------------------------------
-          # Inno Setup script
-          # ------------------------------------------------
           $iss = @(
             '[Setup]'
             'AppId={{8E0A1C7D-2F4A-4C92-9D11-5F8B2C6A73E4}'
@@ -850,25 +847,21 @@ jobs:
             'UninstallDisplayName=TELE & DATA Support'
             ''
             '[Files]'
-            # Viktigt:
-            # RustDesk använder APP_NAME för att hitta den installerade EXE:n.
-            # Därför måste tdisupport.exe installeras med detta namn.
             'Source: "' + (Join-Path $sourceDir "tdisupport.exe") + '"; DestDir: "{app}"; DestName: "TELE & DATA Support.exe"; Flags: ignoreversion'
             'Source: "' + (Join-Path $sourceDir "*") + '"; DestDir: "{app}"; Excludes: "tdisupport.exe"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Icons]'
-            'Name: "{autoprograms}\TELE & DATA Support"; Filename: "{app}\TELE & DATA Support.exe"'
             'Name: "{autodesktop}\TELE & DATA Support"; Filename: "{app}\TELE & DATA Support.exe"'
+            'Name: "{autoprograms}\TELE & DATA Support"; Filename: "{app}\TELE & DATA Support.exe"'
             ''
             '[Run]'
-            # Kör serviceinstallationen som administratör.
-            'Filename: "{app}\TELE & DATA Support.exe"; Parameters: "--install-service"; Flags: waituntilterminated'
-            # Starta sedan klienten.
+            'Filename: "{cmd}"; Parameters: "/C sc.exe create ""TELE & DATA Support"" binPath= """"""{app}\TELE & DATA Support.exe"""" --service"" start= auto DisplayName= ""TELE & DATA Support Service"""; Flags: runhidden waituntilterminated'
+            'Filename: "{cmd}"; Parameters: "/C sc.exe start ""TELE & DATA Support"""; Flags: runhidden waituntilterminated'
             'Filename: "{app}\TELE & DATA Support.exe"; Flags: nowait'
             ''
             '[UninstallRun]'
-            # Ta bort RustDesk-tjänsten innan filerna tas bort.
-            'Filename: "{app}\TELE & DATA Support.exe"; Parameters: "--uninstall-service"; Flags: waituntilterminated'
+            'Filename: "{cmd}"; Parameters: "/C sc.exe stop ""TELE & DATA Support"""; Flags: runhidden waituntilterminated'
+            'Filename: "{cmd}"; Parameters: "/C sc.exe delete ""TELE & DATA Support"""; Flags: runhidden waituntilterminated'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
@@ -891,11 +884,7 @@ jobs:
             exit 1
           }
 
-          Write-Host ""
-          Write-Host "=========================================="
           Write-Host "FÄRDIG KUND-FIL:"
-          Write-Host "=========================================="
-
           Get-Item $output |
             Select-Object Name, Length, FullName
 
