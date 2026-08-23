@@ -889,4 +889,3 @@ jobs:
         with:
           name: TELE-DATA-Support-Windows-x64
           path: ./customer-exe/TELE-DATA-Support.exe
-          path: ./customer-exe/TELE-DATA-Support.exe
