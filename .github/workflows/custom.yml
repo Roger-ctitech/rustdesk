@@ -853,6 +853,7 @@ jobs:
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
+            'Filename: "{app}\tdisupport.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated'
             'Filename: "{app}\tdisupport.exe"; Flags: nowait'
           ) -join "`r`n"
 
