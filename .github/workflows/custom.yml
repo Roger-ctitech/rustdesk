@@ -694,9 +694,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 33. Rename executable
+      # 33. Keep RustDesk executable name
       # ------------------------------------------------
-      - name: 33 - Rename executable
+      - name: 33 - Keep RustDesk executable
         shell: pwsh
         run: |
           $exe = ".\rustdesk\rustdesk.exe"
@@ -706,11 +706,7 @@ jobs:
             exit 1
           }
 
-          Rename-Item `
-            -Path $exe `
-            -NewName "tdisupport.exe"
-
-          Write-Host "Klienten heter nu tdisupport.exe"
+          Write-Host "RustDesk-klienten behåller namnet rustdesk.exe"
 
 
       # ------------------------------------------------
@@ -846,7 +842,7 @@ jobs:
             'SolidCompression=yes'
             'WizardStyle=modern'
             'SetupArchitecture=x64'
-            'UninstallDisplayIcon={app}\tdisupport.exe'
+            'UninstallDisplayIcon={app}\rustdesk.exe'
             'UninstallDisplayName=TELE & DATA Support'
             ''
             '[Files]'
@@ -854,7 +850,9 @@ jobs:
             ''
             '[Run]'
             'Filename: "{app}\tdisupport.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated'
-            'Filename: "{app}\tdisupport.exe"; Flags: nowait'
+            '[Run]'
+            'Filename: "{app}\rustdesk.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated'
+             'Filename: "{app}\rustdesk.exe"; Flags: nowait'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
