@@ -818,8 +818,8 @@ jobs:
           New-Item -ItemType Directory -Path $work | Out-Null
           New-Item -ItemType Directory -Path $outputDir | Out-Null
 
-          if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
-            Write-Error "tdisupport.exe saknas i RustDesk-klienten."
+          if (-not (Test-Path (Join-Path $sourceDir "rustdesk.exe"))) {
+            Write-Error "rustdesk.exe saknas i RustDesk-klienten."
             exit 1
           }
 
@@ -849,10 +849,8 @@ jobs:
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
-            'Filename: "{app}\tdisupport.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated'
-            '[Run]'
             'Filename: "{app}\rustdesk.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated'
-             'Filename: "{app}\rustdesk.exe"; Flags: nowait'
+            'Filename: "{app}\rustdesk.exe"; Flags: nowait'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
