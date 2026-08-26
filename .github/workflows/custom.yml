@@ -694,9 +694,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 33. Keep RustDesk executable name
+      # 33. Rename executable
       # ------------------------------------------------
-      - name: 33 - Keep RustDesk executable
+      - name: 33 - Rename executable
         shell: pwsh
         run: |
           $exe = ".\rustdesk\rustdesk.exe"
@@ -706,7 +706,11 @@ jobs:
             exit 1
           }
 
-          Write-Host "RustDesk-klienten behåller namnet rustdesk.exe"
+          Rename-Item `
+            -Path $exe `
+            -NewName "tdisupport-qs.exe"
+
+          Write-Host "Klienten heter nu tdisupport-qs.exe"
 
 
       # ------------------------------------------------
@@ -760,7 +764,6 @@ jobs:
 
           if (-not $iscc) {
             Write-Host "Letar efter ISCC.exe..."
-
             $found = Get-ChildItem `
               -Path "C:\Program Files","C:\Program Files (x86)",$env:LOCALAPPDATA `
               -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
@@ -777,7 +780,6 @@ jobs:
           }
 
           Write-Host "Hittade ISCC: $iscc"
-
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
@@ -798,9 +800,7 @@ jobs:
             "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
           )
 
-          $iscc = $possibleIscc |
-            Where-Object { $_ -and (Test-Path $_) } |
-            Select-Object -First 1
+          $iscc = $possibleIscc | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 
           if (-not $iscc) {
             Write-Error "ISCC.exe hittades inte."
@@ -818,8 +818,8 @@ jobs:
           New-Item -ItemType Directory -Path $work | Out-Null
           New-Item -ItemType Directory -Path $outputDir | Out-Null
 
-          if (-not (Test-Path (Join-Path $sourceDir "rustdesk.exe"))) {
-            Write-Error "rustdesk.exe saknas i RustDesk-klienten."
+          if (-not (Test-Path (Join-Path $sourceDir "tdisupport-qs.exe"))) {
+            Write-Error "tdisupport-qs.exe saknas i RustDesk-klienten."
             exit 1
           }
 
@@ -842,15 +842,14 @@ jobs:
             'SolidCompression=yes'
             'WizardStyle=modern'
             'SetupArchitecture=x64'
-            'UninstallDisplayIcon={app}\rustdesk.exe'
+            'UninstallDisplayIcon={app}\tdisupport-qs.exe'
             'UninstallDisplayName=TELE & DATA Support'
             ''
             '[Files]'
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
-            'Filename: "{app}\rustdesk.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated'
-            'Filename: "{app}\rustdesk.exe"; Flags: nowait'
+            'Filename: "{app}\tdisupport-qs.exe"; Flags: nowait'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
@@ -876,7 +875,6 @@ jobs:
           Write-Host ""
           Write-Host "FÄRDIG KUND-FIL:"
           Get-Item $output | Select-Object Name, Length, FullName
-
 
       # ------------------------------------------------
       # 36. Upload ONE customer EXE
