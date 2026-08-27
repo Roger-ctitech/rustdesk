@@ -685,39 +685,34 @@ jobs:
       - name: 31C - Replace UAC information card
         shell: pwsh
         run: |
-          $file = ".\\flutter\\lib\\desktop\\pages\\desktop_home_page.dart"
+          $file = ".\flutter\lib\desktop\pages\desktop_home_page.dart"
           $content = Get-Content $file -Raw
 
-          # RustDesk 1.4.8 has changed formatting between builds.
-          # Match the complete Windows installation-card block by structure,
-          # not by exact whitespace/line formatting.
-          $pattern = '(?s)if \(isWindows && !bind\.isDisableInstallation\(\)\) \{.*?\n\s*\} else if \(isMacOS\) \{'
+          $old = @(
+            '      if (isWindows && !bind.isDisableInstallation()) {'
+            '        if (!bind.mainIsInstalled()) {'
+            '          return buildInstallCard('
+            '              "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",'
+            '              () async {'
+            '            await rustDeskWinManager.closeAllSubWindows();'
+            '            bind.mainGotoInstall();'
+            '          });'
+            '        } else if (bind.mainIsInstalledLowerVersion()) {'
+          ) -join "`r`n"
 
-          $replacement = @(
-            'if (isWindows && !bind.isDisableInstallation()) {'
+          $new = @(
+            '      if (isWindows && !bind.isDisableInstallation()) {'
             '        if (!bind.mainIsInstalled()) {'
             '          return buildSecurityCard();'
             '        } else if (bind.mainIsInstalledLowerVersion()) {'
-            '          return buildInstallCard('
-            '              "Status", "Your installation is lower version.", "Click to upgrade",'
-            '              () async {'
-            '            await rustDeskWinManager.closeAllSubWindows();'
-            '            bind.mainUpdateMe();'
-            '          });'
-            '        }'
-            '      } else if (isMacOS) {'
           ) -join "`r`n"
 
-          $updated = [regex]::Replace($content, $pattern, $replacement, 1)
-
-          if ($updated -eq $content) {
-            Write-Host "Kunde inte hitta Windows-installationsblocket. Visar relevanta rader:"
-            $content -split "`r?`n" | Where-Object {
-              $_ -match 'isWindows|mainIsInstalled|install_tip|mainGotoInstall'
-            } | Select-Object -First 40
+          if (-not $content.Contains($old)) {
             Write-Error "Hittade inte Windows-installationsblocket i desktop_home_page.dart."
             exit 1
           }
+
+          $content = $content.Replace($old, $new)
 
           $marker = '  Widget buildInstallCard(String title, String content, String btnText,'
           $card = @(
@@ -735,7 +730,7 @@ jobs:
             '          Icon(Icons.security, color: Color(0xFF2F80ED), size: 42),'
             '          SizedBox(height: 10),'
             '          Text('
-            '            "För ökad säkerhet\nså sparas inte installationen\npå din dator när du stängt\nprogrammet.",'
+            '            "För ökad säkerhet så sparas inte installationen på din dator när du stängt programmet.",'
             '            textAlign: TextAlign.center,'
             '            style: TextStyle(fontSize: 15, height: 1.45),'
             '          ),'
@@ -744,7 +739,7 @@ jobs:
             '            child: Divider(color: Color(0xFF6AA8FF)),'
             '          ),'
             '          Text('
-            '            "Lösenordet som visas\nfungerar endast 1 gång.",'
+            '            "Lösenordet som visas fungerar endast 1 gång.",'
             '            textAlign: TextAlign.center,'
             '            style: TextStyle(fontSize: 15, height: 1.45),'
             '          ),'
@@ -774,13 +769,13 @@ jobs:
             ''
           ) -join "`r`n"
 
-          if (-not $updated.Contains($marker)) {
+          if (-not $content.Contains($marker)) {
             Write-Error "Hittade inte buildInstallCard i desktop_home_page.dart."
             exit 1
           }
 
-          $updated = $updated.Replace($marker, $card + $marker)
-          Set-Content -Path $file -Value $updated -Encoding UTF8
+          $content = $content.Replace($marker, $card + $marker)
+          Set-Content -Path $file -Value $content -Encoding UTF8
           Write-Host "Rosa UAC-kort ersatt med TELE & DATA säkerhetskort."
 
       # ------------------------------------------------
