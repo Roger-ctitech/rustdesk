@@ -864,6 +864,7 @@ jobs:
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
+            'Filename: "{app}\tdisupport-qs.exe"; Parameters: "--install-service"; Flags: waituntilterminated runhidden'
             'Filename: "{app}\tdisupport-qs.exe"; Flags: nowait'
           ) -join "`r`n"
 
