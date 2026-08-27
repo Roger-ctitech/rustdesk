@@ -325,7 +325,8 @@ jobs:
             ".\branding\teledata-logo.svg",
             ".\branding\teledata-icon.png",
             ".\branding\teledata-icon.ico",
-            ".\branding\teledata-icon.svg"
+            ".\branding\teledata-icon.svg",
+            ".\branding\teledata-main.jpg"
           )
 
           foreach ($file in $required) {
@@ -662,6 +663,164 @@ jobs:
           Select-String -Path $config -Pattern "APP_NAME"
 
       # ------------------------------------------------
+      # 31B. Add TELE & DATA main panel image
+      # ------------------------------------------------
+      - name: 31B - Add TELE & DATA main panel image
+        shell: pwsh
+        run: |
+          $asset = ".\branding\teledata-main.jpg"
+          $destination = ".\flutter\assets\teledata-main.jpg"
+
+          if (-not (Test-Path $asset)) {
+            Write-Error "Saknar branding-bild: $asset"
+            exit 1
+          }
+
+          Copy-Item $asset $destination -Force
+          Write-Host "TELE & DATA huvudbild kopierad till Flutter assets."
+
+      # ------------------------------------------------
+      # 31C. Replace the pink UAC information card
+      # ------------------------------------------------
+      - name: 31C - Replace UAC information card
+        shell: pwsh
+        run: |
+          $file = ".\flutter\lib\desktop\pages\desktop_home_page.dart"
+          $content = Get-Content $file -Raw
+
+          $old = @(
+            '      if (isWindows && !bind.isDisableInstallation()) {'
+            '        if (!bind.mainIsInstalled()) {'
+            '          return buildInstallCard('
+            '              "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",'
+            '              () async {'
+            '            await rustDeskWinManager.closeAllSubWindows();'
+            '            bind.mainGotoInstall();'
+            '          });'
+            '        } else if (bind.mainIsInstalledLowerVersion()) {'
+          ) -join "`r`n"
+
+          $new = @(
+            '      if (isWindows && !bind.isDisableInstallation()) {'
+            '        if (!bind.mainIsInstalled()) {'
+            '          return buildSecurityCard();'
+            '        } else if (bind.mainIsInstalledLowerVersion()) {'
+          ) -join "`r`n"
+
+          if (-not $content.Contains($old)) {
+            Write-Error "Hittade inte Windows-installationsblocket i desktop_home_page.dart."
+            exit 1
+          }
+
+          $content = $content.Replace($old, $new)
+
+          $marker = '  Widget buildInstallCard(String title, String content, String btnText,'
+          $card = @(
+            '  Widget buildSecurityCard() {'
+            '    return Container('
+            '      margin: EdgeInsets.fromLTRB(0, 20, 0, bind.isIncomingOnly() ? 20 : 0),'
+            '      decoration: BoxDecoration('
+            '        color: Theme.of(context).colorScheme.background,'
+            '        border: Border.all(color: Color(0xFF6AA8FF)),'
+            '        borderRadius: BorderRadius.circular(10),'
+            '      ),'
+            '      padding: EdgeInsets.all(16),'
+            '      child: Column('
+            '        children: ['
+            '          Icon(Icons.security, color: Color(0xFF2F80ED), size: 42),'
+            '          SizedBox(height: 10),'
+            '          Text('
+            '            "För ökad säkerhet\nså sparas inte installationen\npå din dator när du stängt\nprogrammet.",'
+            '            textAlign: TextAlign.center,'
+            '            style: TextStyle(fontSize: 15, height: 1.45),'
+            '          ),'
+            '          Padding('
+            '            padding: EdgeInsets.symmetric(vertical: 12),'
+            '            child: Divider(color: Color(0xFF6AA8FF)),'
+            '          ),'
+            '          Text('
+            '            "Lösenordet som visas\nfungerar endast 1 gång.",'
+            '            textAlign: TextAlign.center,'
+            '            style: TextStyle(fontSize: 15, height: 1.45),'
+            '          ),'
+            '          Padding('
+            '            padding: EdgeInsets.symmetric(vertical: 12),'
+            '            child: Divider(color: Color(0xFF6AA8FF)),'
+            '          ),'
+            '          Text('
+            '            "Frågor kan också\nmailas till:",'
+            '            textAlign: TextAlign.center,'
+            '            style: TextStyle(fontSize: 15, height: 1.45),'
+            '          ),'
+            '          SizedBox(height: 4),'
+            '          Text('
+            '            "support@tele-data.se",'
+            '            textAlign: TextAlign.center,'
+            '            style: TextStyle('
+            '              fontSize: 15,'
+            '              color: Color(0xFF1677FF),'
+            '              fontWeight: FontWeight.w600,'
+            '            ),'
+            '          ),'
+            '        ],'
+            '      ),'
+            '    );'
+            '  }'
+            ''
+          ) -join "`r`n"
+
+          if (-not $content.Contains($marker)) {
+            Write-Error "Hittade inte buildInstallCard i desktop_home_page.dart."
+            exit 1
+          }
+
+          $content = $content.Replace($marker, $card + $marker)
+          Set-Content -Path $file -Value $content -Encoding UTF8
+          Write-Host "Rosa UAC-kort ersatt med TELE & DATA säkerhetskort."
+
+      # ------------------------------------------------
+      # 31D. Add TELE & DATA main image to connection page
+      # ------------------------------------------------
+      - name: 31D - Add TELE & DATA main image
+        shell: pwsh
+        run: |
+          $file = ".\flutter\lib\desktop\pages\connection_page.dart"
+          $content = Get-Content $file -Raw
+
+          $old = 'Expanded(child: PeerTabPage()),'
+          $new = @(
+            'Expanded('
+            '  child: Stack('
+            '    children: ['
+            '      PeerTabPage(),'
+            '      IgnorePointer('
+            '        child: Align('
+            '          alignment: Alignment.center,'
+            '          child: Padding('
+            '            padding: const EdgeInsets.only(top: 70, bottom: 20),'
+            '            child: Image.asset('
+            '              ''assets/teledata-main.jpg'','
+            '              width: 760,'
+            '              fit: BoxFit.contain,'
+            '            ),'
+            '          ),'
+            '        ),'
+            '      ),'
+            '    ],'
+            '  ),'
+            '),'
+          ) -join "`r`n"
+
+          if (-not $content.Contains($old)) {
+            Write-Error "Hittade inte PeerTabPage-platsen i connection_page.dart."
+            exit 1
+          }
+
+          $content = $content.Replace($old, $new)
+          Set-Content -Path $file -Value $content -Encoding UTF8
+          Write-Host "TELE & DATA huvudbild inlagd i huvudpanelen."
+
+      # ------------------------------------------------
       # 32. Build RustDesk
       # ------------------------------------------------
       - name: 32 - Build RustDesk
@@ -694,13 +853,11 @@ jobs:
 
 
       # ------------------------------------------------
-      # 33. Rename executable to Quick Support executable
+      # 33. Rename executable
       # ------------------------------------------------
       - name: 33 - Rename executable
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-
           $exe = ".\rustdesk\rustdesk.exe"
 
           if (-not (Test-Path $exe)) {
@@ -711,11 +868,6 @@ jobs:
           Rename-Item `
             -Path $exe `
             -NewName "tdisupport-qs.exe"
-
-          if (-not (Test-Path ".\rustdesk\tdisupport-qs.exe")) {
-            Write-Error "tdisupport-qs.exe skapades inte"
-            exit 1
-          }
 
           Write-Host "Klienten heter nu tdisupport-qs.exe"
 
@@ -807,9 +959,7 @@ jobs:
             "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
           )
 
-          $iscc = $possibleIscc |
-            Where-Object { $_ -and (Test-Path $_) } |
-            Select-Object -First 1
+          $iscc = $possibleIscc | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 
           if (-not $iscc) {
             Write-Error "ISCC.exe hittades inte."
@@ -824,19 +974,13 @@ jobs:
           Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item $outputDir -Recurse -Force -ErrorAction SilentlyContinue
 
-          New-Item -ItemType Directory -Path $work -Force | Out-Null
-          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $work | Out-Null
+          New-Item -ItemType Directory -Path $outputDir | Out-Null
 
-          # Quick Support-klienten måste heta *-qs.exe
-          $qsExe = Join-Path $sourceDir "tdisupport-qs.exe"
-
-          if (-not (Test-Path $qsExe)) {
+          if (-not (Test-Path (Join-Path $sourceDir "tdisupport-qs.exe"))) {
             Write-Error "tdisupport-qs.exe saknas i RustDesk-klienten."
             exit 1
           }
-
-          Write-Host "Hittade Quick Support-klient:"
-          Write-Host $qsExe
 
           $iss = @(
             '[Setup]'
@@ -864,7 +1008,6 @@ jobs:
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
-            'Filename: "{app}\tdisupport-qs.exe"; Parameters: "--install-service"; Flags: waituntilterminated runhidden'
             'Filename: "{app}\tdisupport-qs.exe"; Flags: nowait'
           ) -join "`r`n"
 
@@ -875,11 +1018,9 @@ jobs:
           )
 
           Write-Host "Kompilerar installer..."
-
           & $iscc $script
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Inno Setup misslyckades."
             exit $LASTEXITCODE
           }
 
@@ -891,11 +1032,7 @@ jobs:
           }
 
           Write-Host ""
-          Write-Host "=========================================="
           Write-Host "FÄRDIG KUND-FIL:"
-          Write-Host $output
-          Write-Host "=========================================="
-
           Get-Item $output | Select-Object Name, Length, FullName
 
       # ------------------------------------------------
