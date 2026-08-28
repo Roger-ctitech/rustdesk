@@ -1,4 +1,4 @@
-# VERSION: v18
+# VERSION: v19
 # Based on: TELE-DATA-Support-custom-v16-working-base-phone-text.yml
 # v18: same working base, no service/install changes.
 name: Build tdisupport
@@ -685,101 +685,7 @@ jobs:
       # ------------------------------------------------
       # 31C. Replace the pink UAC information card
       # ------------------------------------------------
-      - name: 31C - Replace UAC information card
-        shell: pwsh
-        run: |
-          $file = ".\flutter\lib\desktop\pages\desktop_home_page.dart"
-          $content = Get-Content $file -Raw
 
-          $old = @(
-            '      if (isWindows && !bind.isDisableInstallation()) {'
-            '        if (!bind.mainIsInstalled()) {'
-            '          return buildInstallCard('
-            '              "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",'
-            '              () async {'
-            '            await rustDeskWinManager.closeAllSubWindows();'
-            '            bind.mainGotoInstall();'
-            '          });'
-            '        } else if (bind.mainIsInstalledLowerVersion()) {'
-          ) -join "`r`n"
-
-          $new = @(
-            '      if (isWindows && !bind.isDisableInstallation()) {'
-            '        if (!bind.mainIsInstalled()) {'
-            '          return buildSecurityCard();'
-            '        } else if (bind.mainIsInstalledLowerVersion()) {'
-          ) -join "`r`n"
-
-          if (-not $content.Contains($old)) {
-            Write-Error "Hittade inte Windows-installationsblocket i desktop_home_page.dart."
-            exit 1
-          }
-
-          $content = $content.Replace($old, $new)
-
-          $marker = '  Widget buildInstallCard(String title, String content, String btnText,'
-          $card = @(
-            '  Widget buildSecurityCard() {'
-            '    return Container('
-            '      margin: EdgeInsets.fromLTRB(0, 20, 0, bind.isIncomingOnly() ? 20 : 0),'
-            '      decoration: BoxDecoration('
-            '        color: Theme.of(context).colorScheme.background,'
-            '        border: Border.all(color: Color(0xFF6AA8FF)),'
-            '        borderRadius: BorderRadius.circular(10),'
-            '      ),'
-            '      padding: EdgeInsets.all(16),'
-            '      child: Column('
-            '        children: ['
-            '          Icon(Icons.security, color: Color(0xFF2F80ED), size: 42),'
-            '          SizedBox(height: 10),'
-            '          Text('
-            '            "För ökad säkerhet så sparas inte installationen på din dator när du stängt programmet.",'
-            '            textAlign: TextAlign.center,'
-            '            style: TextStyle(fontSize: 15, height: 1.45),'
-            '          ),'
-            '          Padding('
-            '            padding: EdgeInsets.symmetric(vertical: 12),'
-            '            child: Divider(color: Color(0xFF6AA8FF)),'
-            '          ),'
-            '          Text('
-            '            "Lösenordet som visas fungerar endast 1 gång.",'
-            '            textAlign: TextAlign.center,'
-            '            style: TextStyle(fontSize: 15, height: 1.45),'
-            '          ),'
-            '          Padding('
-            '            padding: EdgeInsets.symmetric(vertical: 12),'
-            '            child: Divider(color: Color(0xFF6AA8FF)),'
-            '          ),'
-            '          Text('
-            '            "Frågor kan också\nmailas till:",'
-            '            textAlign: TextAlign.center,'
-            '            style: TextStyle(fontSize: 15, height: 1.45),'
-            '          ),'
-            '          SizedBox(height: 4),'
-            '          Text('
-            '            "support@tele-data.se",'
-            '            textAlign: TextAlign.center,'
-            '            style: TextStyle('
-            '              fontSize: 15,'
-            '              color: Color(0xFF1677FF),'
-            '              fontWeight: FontWeight.w600,'
-            '            ),'
-            '          ),'
-            '        ],'
-            '      ),'
-            '    );'
-            '  }'
-            ''
-          ) -join "`r`n"
-
-          if (-not $content.Contains($marker)) {
-            Write-Error "Hittade inte buildInstallCard i desktop_home_page.dart."
-            exit 1
-          }
-
-          $content = $content.Replace($marker, $card + $marker)
-          Set-Content -Path $file -Value $content -Encoding UTF8
-          Write-Host "Rosa UAC-kort ersatt med TELE & DATA säkerhetskort."
 
       # ------------------------------------------------
       # 31D. Add TELE & DATA main image to connection page
