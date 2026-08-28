@@ -1,7 +1,6 @@
-# VERSION: v17
-# Based on: TELE-DATA-Support-custom-v15-fixed-31C.yml
-# v17: robust replacement of Windows security/UAC card; other build logic unchanged.
-
+# VERSION: v18
+# Based on: TELE-DATA-Support-custom-v16-working-base-phone-text.yml
+# v18: same working base, no service/install changes.
 name: Build tdisupport
 
 on:
@@ -686,63 +685,38 @@ jobs:
       # ------------------------------------------------
       # 31C. Replace the pink UAC information card
       # ------------------------------------------------
-      - name: 31C - Replace UAC information card (v17)
+      - name: 31C - Replace UAC information card
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-
           $file = ".\flutter\lib\desktop\pages\desktop_home_page.dart"
-
-          if (-not (Test-Path $file)) {
-            Write-Error "Hittar inte $file"
-            exit 1
-          }
-
           $content = Get-Content $file -Raw
 
-          # Hitta Windows-blocket med positionssökning i stället för en
-          # känslig regex. Detta fungerar även om whitespace/formatering
-          # skiljer sig mellan RustDesk 1.4.8-builds.
-          $startMarker = "if (isWindows && !bind.isDisableInstallation()) {"
-          $endMarker = "else if (isMacOS)"
+          $old = @(
+            '      if (isWindows && !bind.isDisableInstallation()) {'
+            '        if (!bind.mainIsInstalled()) {'
+            '          return buildInstallCard('
+            '              "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",'
+            '              () async {'
+            '            await rustDeskWinManager.closeAllSubWindows();'
+            '            bind.mainGotoInstall();'
+            '          });'
+            '        } else if (bind.mainIsInstalledLowerVersion()) {'
+          ) -join "`r`n"
 
-          $start = $content.IndexOf($startMarker)
-          if ($start -lt 0) {
-            Write-Host "Kunde inte hitta startpunkten för Windows-installationsblocket."
-            $content -split "`r?`n" | Where-Object {
-              $_ -match 'isWindows|mainIsInstalled|install_tip|mainGotoInstall'
-            } | Select-Object -First 60
+          $new = @(
+            '      if (isWindows && !bind.isDisableInstallation()) {'
+            '        if (!bind.mainIsInstalled()) {'
+            '          return buildSecurityCard();'
+            '        } else if (bind.mainIsInstalledLowerVersion()) {'
+          ) -join "`r`n"
+
+          if (-not $content.Contains($old)) {
             Write-Error "Hittade inte Windows-installationsblocket i desktop_home_page.dart."
             exit 1
           }
 
-          $end = $content.IndexOf($endMarker, $start)
-          if ($end -lt 0) {
-            Write-Host "Kunde inte hitta slutpunkten för Windows-installationsblocket."
-            Write-Error "Hittade inte macOS-blocket efter Windows-installationsblocket."
-            exit 1
-          }
+          $content = $content.Replace($old, $new)
 
-          # Behåll den befintliga macOS-koden från 'else if (isMacOS)' och
-          # ersätt endast Windows-delen.
-          $replacement = @(
-            'if (isWindows && !bind.isDisableInstallation()) {'
-            '        if (!bind.mainIsInstalled()) {'
-            '          return buildSecurityCard();'
-            '        } else if (bind.mainIsInstalledLowerVersion()) {'
-            '          return buildInstallCard('
-            '              "Status", "Your installation is lower version.", "Click to upgrade",'
-            '              () async {'
-            '            await rustDeskWinManager.closeAllSubWindows();'
-            '            bind.mainUpdateMe();'
-            '          });'
-            '        }'
-            '      } '
-          ) -join "`r`n"
-
-          $updated = $content.Substring(0, $start) + $replacement + $content.Substring($end)
-
-          # Lägg till vår säkerhetsruta före den befintliga buildInstallCard.
           $marker = '  Widget buildInstallCard(String title, String content, String btnText,'
           $card = @(
             '  Widget buildSecurityCard() {'
@@ -759,7 +733,7 @@ jobs:
             '          Icon(Icons.security, color: Color(0xFF2F80ED), size: 42),'
             '          SizedBox(height: 10),'
             '          Text('
-            '            "För ökad säkerhet\nså sparas inte installationen\npå din dator när du stängt\nprogrammet.",'
+            '            "För ökad säkerhet så sparas inte installationen på din dator när du stängt programmet.",'
             '            textAlign: TextAlign.center,'
             '            style: TextStyle(fontSize: 15, height: 1.45),'
             '          ),'
@@ -768,7 +742,7 @@ jobs:
             '            child: Divider(color: Color(0xFF6AA8FF)),'
             '          ),'
             '          Text('
-            '            "Lösenordet som visas\nfungerar endast 1 gång.",'
+            '            "Lösenordet som visas fungerar endast 1 gång.",'
             '            textAlign: TextAlign.center,'
             '            style: TextStyle(fontSize: 15, height: 1.45),'
             '          ),'
@@ -798,16 +772,14 @@ jobs:
             ''
           ) -join "`r`n"
 
-          if (-not $updated.Contains($marker)) {
+          if (-not $content.Contains($marker)) {
             Write-Error "Hittade inte buildInstallCard i desktop_home_page.dart."
             exit 1
           }
 
-          $updated = $updated.Replace($marker, $card + $marker)
-          Set-Content -Path $file -Value $updated -Encoding UTF8
-
-          Write-Host "OK: Windows UAC-installationskortet ersatt med TELE & DATA säkerhetskort."
-          Write-Host "OK: Installationslogiken i övrigt är oförändrad."
+          $content = $content.Replace($marker, $card + $marker)
+          Set-Content -Path $file -Value $content -Encoding UTF8
+          Write-Host "Rosa UAC-kort ersatt med TELE & DATA säkerhetskort."
 
       # ------------------------------------------------
       # 31D. Add TELE & DATA main image to connection page
