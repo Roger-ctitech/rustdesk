@@ -775,7 +775,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
+          Write-Host "=========================================="
           Write-Host "Installerar Inno Setup 7..."
+          Write-Host "=========================================="
 
           $installer = Join-Path `
             $env:RUNNER_TEMP `
@@ -801,28 +803,66 @@ jobs:
 
           Start-Process `
             -FilePath $installer `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER" `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" `
             -Wait `
             -NoNewWindow
 
-          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          Write-Host ""
+          Write-Host "Letar efter ISCC.exe..."
 
-          if (-not (Test-Path $iscc)) {
-            Write-Host "Letar efter ISCC.exe..."
+          $iscc = $null
 
-            Get-ChildItem `
-              "${env:ProgramFiles}" `
-              -Recurse `
-              -Filter "ISCC.exe" `
-              -ErrorAction SilentlyContinue |
-              Select-Object FullName |
-              Format-Table -AutoSize
+          $possiblePaths = @(
+            "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe",
+            "${env:LOCALAPPDATA}\Inno Setup 7\ISCC.exe"
+          )
 
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              $iscc = $path
+              break
+            }
+          }
+
+          if (-not $iscc) {
+            Write-Host "ISCC.exe hittades inte på standardplatser."
+            Write-Host "Söker igenom Program Files och LocalAppData..."
+
+            $searchRoots = @(
+              $env:ProgramFiles,
+              ${env:ProgramFiles(x86)},
+              $env:LOCALAPPDATA
+            )
+
+            foreach ($root in $searchRoots) {
+              if (Test-Path $root) {
+                $found = Get-ChildItem `
+                  -Path $root `
+                  -Recurse `
+                  -Filter "ISCC.exe" `
+                  -ErrorAction SilentlyContinue |
+                  Select-Object -First 1 -ExpandProperty FullName
+
+                if ($found) {
+                  $iscc = $found
+                  break
+                }
+              }
+            }
+          }
+
+          if (-not $iscc) {
             Write-Error "Inno Setup 7 ISCC.exe hittades inte."
             exit 1
           }
 
-          Write-Host "Hittade ISCC: $iscc"
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "Hittade ISCC:"
+          Write-Host $iscc
+          Write-Host "=========================================="
 
 
       # ------------------------------------------------
