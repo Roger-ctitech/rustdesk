@@ -1,6 +1,15 @@
-# VERSION: v19
-# Based on: TELE-DATA-Support-custom-v16-working-base-phone-text.yml
-# v18: same working base, no service/install changes.
+# ============================================================
+# VERSION: v10-BASE
+# TELE & DATA Support
+#
+# BASVERSION – ÄNDRA INTE DENNA FÖRRÄN GRUNDFUNKTIONEN
+# ÄR TESTAD.
+#
+# RustDesk 1.4.8
+# Windows x64
+# Portable Quick Support
+# ============================================================
+
 name: Build tdisupport
 
 on:
@@ -31,7 +40,7 @@ env:
   # ==================================================
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
 
-  VCPKG_ROOT: "C:\\vcpkg"
+  VCPKG_ROOT: "C:\vcpkg"
   VCPKG_DEFAULT_TRIPLET: "x64-windows-static"
 
   # ==================================================
@@ -71,7 +80,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------
-      # 7. Install bridge prerequisites
+      # 7. Install prerequisites
       # ------------------------------------------------
       - name: 7 - Install prerequisites
         run: |
@@ -129,7 +138,7 @@ jobs:
             --locked
 
       # ------------------------------------------------
-      # 11. Prepare Flutter dependencies
+      # 11. Prepare Flutter
       # ------------------------------------------------
       - name: 11 - Prepare Flutter
         shell: bash
@@ -256,6 +265,7 @@ jobs:
           name: bridge-artifact
           path: ./
 
+
       # ------------------------------------------------
       # 18. Verify bridge files
       # ------------------------------------------------
@@ -328,8 +338,7 @@ jobs:
             ".\branding\teledata-logo.svg",
             ".\branding\teledata-icon.png",
             ".\branding\teledata-icon.ico",
-            ".\branding\teledata-icon.svg",
-            ".\branding\teledata-main.jpg"
+            ".\branding\teledata-icon.svg"
           )
 
           foreach ($file in $required) {
@@ -572,7 +581,6 @@ jobs:
           Write-Host "Serverkonfiguration verifierad."
 
 
-
       # ------------------------------------------------
       # 31. Apply TELE & DATA branding
       # ------------------------------------------------
@@ -597,11 +605,12 @@ jobs:
               Write-Error "Lägg filerna i mappen branding/ i GitHub-repot."
               exit 1
             }
+
             Write-Host "OK: $file"
           }
 
           # --------------------------------------------
-          # 27A. Application name
+          # Application name
           # --------------------------------------------
           $config = ".\libs\hbb_common\src\config.rs"
 
@@ -613,8 +622,9 @@ jobs:
           $content = Get-Content $config -Raw
 
           # RustDesk 1.4.8 uses:
-          # pub static ref APP_NAME: RwLock<String> = RwLock::new("RustDesk".to_owned());
-          # Replace only the default string inside the existing declaration.
+          # pub static ref APP_NAME: RwLock<String> =
+          # RwLock::new("RustDesk".to_owned());
+
           $pattern = '(?m)(pub\s+static\s+ref\s+APP_NAME\s*:\s*RwLock<String>\s*=\s*RwLock::new\(")[^"]*(".*?\);)'
 
           $updated = [regex]::Replace(
@@ -625,35 +635,72 @@ jobs:
 
           if ($updated -eq $content) {
             Write-Host "APP_NAME-rader som hittades i config.rs:"
-            $content -split "`r?`n" | Where-Object { $_ -match 'APP_NAME' }
+            $content -split "`r?`n" |
+              Where-Object { $_ -match 'APP_NAME' }
+
             Write-Error "Hittade ingen APP_NAME-deklaration i config.rs"
             exit 1
           }
 
-          Set-Content -Path $config -Value $updated -Encoding UTF8
+          Set-Content `
+            -Path $config `
+            -Value $updated `
+            -Encoding UTF8
 
           Write-Host "APP_NAME ändrad till: $env:APP_NAME"
 
           # --------------------------------------------
-          # 27B. Main logo used by the Flutter client
+          # Main logo
           # --------------------------------------------
-          Copy-Item ".\branding\teledata-logo.png" ".\flutter\assets\logo.png" -Force
-          Copy-Item ".\branding\teledata-logo.svg" ".\flutter\assets\logo.svg" -Force
+          Copy-Item `
+            ".\branding\teledata-logo.png" `
+            ".\flutter\assets\logo.png" `
+            -Force
+
+          Copy-Item `
+            ".\branding\teledata-logo.svg" `
+            ".\flutter\assets\logo.svg" `
+            -Force
 
           # --------------------------------------------
-          # 27C. Windows / tray icons
+          # Windows / tray icons
           # --------------------------------------------
-          Copy-Item ".\branding\teledata-icon.png" ".\res\icon.png" -Force
-          Copy-Item ".\branding\teledata-icon.ico" ".\res\icon.ico" -Force
-          Copy-Item ".\branding\teledata-icon.ico" ".\flutter\assets\logo.ico" -Force
-          Copy-Item ".\branding\teledata-icon.svg" ".\flutter\assets\icon.svg" -Force
-          Copy-Item ".\branding\teledata-icon.svg" ".\res\scalable.svg" -Force
+          Copy-Item `
+            ".\branding\teledata-icon.png" `
+            ".\res\icon.png" `
+            -Force
+
+          Copy-Item `
+            ".\branding\teledata-icon.ico" `
+            ".\res\icon.ico" `
+            -Force
+
+          Copy-Item `
+            ".\branding\teledata-icon.ico" `
+            ".\flutter\assets\logo.ico" `
+            -Force
+
+          Copy-Item `
+            ".\branding\teledata-icon.svg" `
+            ".\flutter\assets\icon.svg" `
+            -Force
+
+          Copy-Item `
+            ".\branding\teledata-icon.svg" `
+            ".\res\scalable.svg" `
+            -Force
 
           $runnerIcon = ".\flutter\windows\runner\resources\app_icon.ico"
+
           if (Test-Path $runnerIcon) {
-            Copy-Item ".\branding\teledata-icon.ico" $runnerIcon -Force
+            Copy-Item `
+              ".\branding\teledata-icon.ico" `
+              $runnerIcon `
+              -Force
+
             Write-Host "OK: Windows runner icon ersatt."
-          } else {
+          }
+          else {
             Write-Host "OBS: $runnerIcon finns inte i denna RustDesk-version."
           }
 
@@ -663,71 +710,10 @@ jobs:
           Write-Host "App name: $env:APP_NAME"
           Write-Host "=========================================="
 
-          Select-String -Path $config -Pattern "APP_NAME"
+          Select-String `
+            -Path $config `
+            -Pattern "APP_NAME"
 
-      # ------------------------------------------------
-      # 31B. Add TELE & DATA main panel image
-      # ------------------------------------------------
-      - name: 31B - Add TELE & DATA main panel image
-        shell: pwsh
-        run: |
-          $asset = ".\branding\teledata-main.jpg"
-          $destination = ".\flutter\assets\teledata-main.jpg"
-
-          if (-not (Test-Path $asset)) {
-            Write-Error "Saknar branding-bild: $asset"
-            exit 1
-          }
-
-          Copy-Item $asset $destination -Force
-          Write-Host "TELE & DATA huvudbild kopierad till Flutter assets."
-
-      # ------------------------------------------------
-      # 31C. Replace the pink UAC information card
-      # ------------------------------------------------
-
-
-      # ------------------------------------------------
-      # 31D. Add TELE & DATA main image to connection page
-      # ------------------------------------------------
-      - name: 31D - Add TELE & DATA main image
-        shell: pwsh
-        run: |
-          $file = ".\flutter\lib\desktop\pages\connection_page.dart"
-          $content = Get-Content $file -Raw
-
-          $old = 'Expanded(child: PeerTabPage()),'
-          $new = @(
-            'Expanded('
-            '  child: Stack('
-            '    children: ['
-            '      PeerTabPage(),'
-            '      IgnorePointer('
-            '        child: Align('
-            '          alignment: Alignment.center,'
-            '          child: Padding('
-            '            padding: const EdgeInsets.only(top: 70, bottom: 20),'
-            '            child: Image.asset('
-            '              ''assets/teledata-main.jpg'','
-            '              width: 760,'
-            '              fit: BoxFit.contain,'
-            '            ),'
-            '          ),'
-            '        ),'
-            '      ),'
-            '    ],'
-            '  ),'
-            '),'
-          ) -join "`r`n"
-
-          if (-not $content.Contains($old)) {
-            Write-Error "Hittade inte PeerTabPage-platsen i connection_page.dart."
-            exit 1
-          }
-
-          $content = $content.Replace($old, $new)
-          Set-Content -Path $file -Value $content -Encoding UTF8
-          Write-Host "TELE & DATA huvudbild inlagd i huvudpanelen."
 
       # ------------------------------------------------
       # 32. Build RustDesk
@@ -776,9 +762,9 @@ jobs:
 
           Rename-Item `
             -Path $exe `
-            -NewName "tdisupport-qs.exe"
+            -NewName "tdisupport.exe"
 
-          Write-Host "Klienten heter nu tdisupport-qs.exe"
+          Write-Host "Klienten heter nu tdisupport.exe"
 
 
       # ------------------------------------------------
@@ -791,7 +777,9 @@ jobs:
 
           Write-Host "Installerar Inno Setup 7..."
 
-          $installer = Join-Path $env:RUNNER_TEMP "innosetup-7.0.2-x64.exe"
+          $installer = Join-Path `
+            $env:RUNNER_TEMP `
+            "innosetup-7.0.2-x64.exe"
 
           Invoke-WebRequest `
             -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_0_2/innosetup-7.0.2-x64.exe" `
@@ -803,6 +791,7 @@ jobs:
           }
 
           $size = (Get-Item $installer).Length
+
           Write-Host "Nedladdad installer: $size bytes"
 
           if ($size -lt 1000000) {
@@ -812,42 +801,29 @@ jobs:
 
           Start-Process `
             -FilePath $installer `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS" `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER" `
             -Wait `
             -NoNewWindow
 
-          $possibleIscc = @(
-            "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
-            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
-            "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
-          )
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
 
-          $iscc = $null
-          foreach ($candidate in $possibleIscc) {
-            if ($candidate -and (Test-Path $candidate)) {
-              $iscc = $candidate
-              break
-            }
-          }
-
-          if (-not $iscc) {
+          if (-not (Test-Path $iscc)) {
             Write-Host "Letar efter ISCC.exe..."
-            $found = Get-ChildItem `
-              -Path "C:\Program Files","C:\Program Files (x86)",$env:LOCALAPPDATA `
-              -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
-              Select-Object -First 1
 
-            if ($found) {
-              $iscc = $found.FullName
-            }
-          }
+            Get-ChildItem `
+              "${env:ProgramFiles}" `
+              -Recurse `
+              -Filter "ISCC.exe" `
+              -ErrorAction SilentlyContinue |
+              Select-Object FullName |
+              Format-Table -AutoSize
 
-          if (-not $iscc) {
             Write-Error "Inno Setup 7 ISCC.exe hittades inte."
             exit 1
           }
 
           Write-Host "Hittade ISCC: $iscc"
+
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
@@ -862,62 +838,74 @@ jobs:
           Write-Host "TELE-DATA-Support.exe"
           Write-Host "=========================================="
 
-          $possibleIscc = @(
-            "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
-            "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
-            "${env:LOCALAPPDATA}\Programs\Inno Setup 7\ISCC.exe"
-          )
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
 
-          $iscc = $possibleIscc | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $work = Join-Path `
+            $env:RUNNER_TEMP `
+            "tdisupport-inno"
 
-          if (-not $iscc) {
-            Write-Error "ISCC.exe hittades inte."
-            exit 1
-          }
+          $script = Join-Path `
+            $work `
+            "TELE-DATA-Support.iss"
 
-          $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
-          $script = Join-Path $work "TELE-DATA-Support.iss"
-          $outputDir = Join-Path $env:GITHUB_WORKSPACE "customer-exe"
-          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "rustdesk"
+          $outputDir = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "customer-exe"
 
-          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item $outputDir -Recurse -Force -ErrorAction SilentlyContinue
+          $sourceDir = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "rustdesk"
 
-          New-Item -ItemType Directory -Path $work | Out-Null
-          New-Item -ItemType Directory -Path $outputDir | Out-Null
+          Remove-Item `
+            $work `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
 
-          if (-not (Test-Path (Join-Path $sourceDir "tdisupport-qs.exe"))) {
-            Write-Error "tdisupport-qs.exe saknas i RustDesk-klienten."
+          Remove-Item `
+            $outputDir `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+          New-Item `
+            -ItemType Directory `
+            -Path $work |
+            Out-Null
+
+          New-Item `
+            -ItemType Directory `
+            -Path $outputDir |
+            Out-Null
+
+          if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
+            Write-Error "tdisupport.exe saknas i RustDesk-klienten."
             exit 1
           }
 
           $iss = @(
             '[Setup]'
-            'AppId={{8E0A1C7D-2F4A-4C92-9D11-5F8B2C6A73E4}'
             'AppName=TELE & DATA Support'
-            'AppVersion=1.0.0'
-            'AppPublisher=TELE & DATA Integration Sweden AB'
-            'DefaultDirName={autopf}\TELE-DATA Support'
+            'AppVersion=1.0'
+            'DefaultDirName={localappdata}\TELE-DATA Support'
             'DisableProgramGroupPage=yes'
             'DisableDirPage=yes'
             'DisableReadyPage=yes'
             'DisableFinishedPage=yes'
-            'Uninstallable=yes'
-            'PrivilegesRequired=admin'
+            'Uninstallable=no'
+            'PrivilegesRequired=lowest'
             'OutputDir=' + $outputDir
             'OutputBaseFilename=TELE-DATA-Support'
             'Compression=lzma2'
             'SolidCompression=yes'
             'WizardStyle=modern'
             'SetupArchitecture=x64'
-            'UninstallDisplayIcon={app}\tdisupport-qs.exe'
-            'UninstallDisplayName=TELE & DATA Support'
             ''
             '[Files]'
             'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
             ''
             '[Run]'
-            'Filename: "{app}\tdisupport-qs.exe"; Flags: nowait'
+            'Filename: "{app}\tdisupport.exe"; Flags: nowait'
           ) -join "`r`n"
 
           [System.IO.File]::WriteAllText(
@@ -927,13 +915,16 @@ jobs:
           )
 
           Write-Host "Kompilerar installer..."
+
           & $iscc $script
 
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
 
-          $output = Join-Path $outputDir "TELE-DATA-Support.exe"
+          $output = Join-Path `
+            $outputDir `
+            "TELE-DATA-Support.exe"
 
           if (-not (Test-Path $output)) {
             Write-Error "TELE-DATA-Support.exe skapades inte."
@@ -941,8 +932,13 @@ jobs:
           }
 
           Write-Host ""
-          Write-Host "FÄRDIG KUND-FIL:"
-          Get-Item $output | Select-Object Name, Length, FullName
+          Write-Host "=========================================="
+          Write-Host "FÄRDIG KUND-FIL"
+          Write-Host "=========================================="
+
+          Get-Item $output |
+            Select-Object Name, Length, FullName
+
 
       # ------------------------------------------------
       # 36. Upload ONE customer EXE
