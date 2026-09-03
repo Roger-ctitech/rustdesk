@@ -714,10 +714,138 @@ jobs:
 
 
       # ------------------------------------------------
-      # 34. Upload final client
+      # 34. Install Inno Setup 7
       # ------------------------------------------------
-      - name: 34 - Upload tdisupport
+      - name: 34 - Install Inno Setup 7
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "Installerar Inno Setup 7..."
+
+          $installer = Join-Path $env:RUNNER_TEMP "innosetup-7.0.2-x64.exe"
+
+          Invoke-WebRequest `
+            -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_0_2/innosetup-7.0.2-x64.exe" `
+            -OutFile $installer
+
+          if (-not (Test-Path $installer)) {
+            Write-Error "Inno Setup-installern laddades inte ner."
+            exit 1
+          }
+
+          $size = (Get-Item $installer).Length
+          Write-Host "Nedladdad installer: $size bytes"
+
+          if ($size -lt 1000000) {
+            Write-Error "Inno Setup-installern verkar vara felaktig eller ofullständig."
+            exit 1
+          }
+
+          Start-Process `
+            -FilePath $installer `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER" `
+            -Wait `
+            -NoNewWindow
+
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+
+          if (-not (Test-Path $iscc)) {
+            Write-Host "Letar efter ISCC.exe..."
+            Get-ChildItem "${env:ProgramFiles}" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
+              Select-Object FullName |
+              Format-Table -AutoSize
+
+            Write-Error "Inno Setup 7 ISCC.exe hittades inte."
+            exit 1
+          }
+
+          Write-Host "Hittade ISCC: $iscc"
+
+      # ------------------------------------------------
+      # 35. Create ONE TELE & DATA customer EXE
+      # ------------------------------------------------
+      - name: 35 - Create TELE & DATA Support EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "=========================================="
+          Write-Host "SKAPAR EN FIL FÖR KUNDEN"
+          Write-Host "TELE-DATA-Support.exe"
+          Write-Host "=========================================="
+
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
+          $script = Join-Path $work "TELE-DATA-Support.iss"
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE "customer-exe"
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "rustdesk"
+
+          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $outputDir -Recurse -Force -ErrorAction SilentlyContinue
+
+          New-Item -ItemType Directory -Path $work | Out-Null
+          New-Item -ItemType Directory -Path $outputDir | Out-Null
+
+          if (-not (Test-Path (Join-Path $sourceDir "tdisupport.exe"))) {
+            Write-Error "tdisupport.exe saknas i RustDesk-klienten."
+            exit 1
+          }
+
+          $iss = @(
+            '[Setup]'
+            'AppName=TELE & DATA Support'
+            'AppVersion=1.0'
+            'DefaultDirName={localappdata}\TELE-DATA Support'
+            'DisableProgramGroupPage=yes'
+            'DisableDirPage=yes'
+            'DisableReadyPage=yes'
+            'DisableFinishedPage=yes'
+            'Uninstallable=no'
+            'PrivilegesRequired=lowest'
+            'OutputDir=' + $outputDir
+            'OutputBaseFilename=TELE-DATA-Support'
+            'Compression=lzma2'
+            'SolidCompression=yes'
+            'WizardStyle=modern'
+            'SetupArchitecture=x64'
+            ''
+            '[Files]'
+            'Source: "' + (Join-Path $sourceDir '*') + '"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion'
+            ''
+            '[Run]'
+            'Filename: "{app}\tdisupport.exe"; Flags: nowait'
+          ) -join "`r`n"
+
+          [System.IO.File]::WriteAllText(
+            $script,
+            $iss,
+            (New-Object System.Text.UTF8Encoding($false))
+          )
+
+          Write-Host "Kompilerar installer..."
+          & $iscc $script
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $output = Join-Path $outputDir "TELE-DATA-Support.exe"
+
+          if (-not (Test-Path $output)) {
+            Write-Error "TELE-DATA-Support.exe skapades inte."
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "FÄRDIG KUND-FIL:"
+          Get-Item $output | Select-Object Name, Length, FullName
+
+      # ------------------------------------------------
+      # 36. Upload ONE customer EXE
+      # ------------------------------------------------
+      - name: 36 - Upload TELE-DATA Support EXE
         uses: actions/upload-artifact@v4
         with:
-          name: tdisupport-Windows-x64
-          path: ./rustdesk/
+          name: TELE-DATA-Support-Windows-x64
+          path: ./customer-exe/TELE-DATA-Support.exe
