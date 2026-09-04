@@ -1,9 +1,18 @@
+# ======================================================
+# TELE & DATA Support - GitHub Actions workflow
+# WORKFLOW VERSION: v10.1
+# BASED ON: v10
+# CHANGE: Fixad installation/sökväg för Inno Setup 7
+# ======================================================
+
 name: Build tdisupport
 
 on:
   workflow_dispatch:
 
 env:
+  WORKFLOW_VERSION: "v10.1"
+
   # ==================================================
   # 1. TELE-DATA / RustDesk server
   # ==================================================
@@ -744,23 +753,47 @@ jobs:
 
           Start-Process `
             -FilePath $installer `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER" `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS" `
             -Wait `
             -NoNewWindow
 
-          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          # Inno Setup kan hamna i Program Files eller Program Files (x86).
+          # Sök i de vanligaste platserna och spara den faktiska sökvägen
+          # till nästa GitHub Actions-steg via GITHUB_ENV.
+          $candidates = @(
+            (Join-Path $env:ProgramFiles "Inno Setup 7\ISCC.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 7\ISCC.exe"),
+            (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 7\ISCC.exe")
+          ) | Where-Object { $_ -and (Test-Path $_) }
 
-          if (-not (Test-Path $iscc)) {
-            Write-Host "Letar efter ISCC.exe..."
-            Get-ChildItem "${env:ProgramFiles}" -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
-              Select-Object FullName |
-              Format-Table -AutoSize
+          $iscc = $candidates | Select-Object -First 1
 
+          if (-not $iscc) {
+            Write-Host "ISCC.exe fanns inte på standardplatserna. Gör en begränsad sökning..."
+
+            $roots = @(
+              $env:ProgramFiles,
+              ${env:ProgramFiles(x86)},
+              (Join-Path $env:LOCALAPPDATA "Programs")
+            ) | Where-Object { $_ -and (Test-Path $_) }
+
+            foreach ($root in $roots) {
+              $found = Get-ChildItem $root -Recurse -Filter "ISCC.exe" -File -ErrorAction SilentlyContinue |
+                Select-Object -First 1 -ExpandProperty FullName
+              if ($found) {
+                $iscc = $found
+                break
+              }
+            }
+          }
+
+          if (-not $iscc -or -not (Test-Path $iscc)) {
             Write-Error "Inno Setup 7 ISCC.exe hittades inte."
             exit 1
           }
 
           Write-Host "Hittade ISCC: $iscc"
+          "INNO_ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # ------------------------------------------------
       # 35. Create ONE TELE & DATA customer EXE
@@ -775,7 +808,15 @@ jobs:
           Write-Host "TELE-DATA-Support.exe"
           Write-Host "=========================================="
 
-          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          $iscc = $env:INNO_ISCC
+
+          if (-not $iscc -or -not (Test-Path $iscc)) {
+            Write-Error "INNO_ISCC saknas eller pekar inte på ISCC.exe."
+            exit 1
+          }
+
+          Write-Host "Använder ISCC: $iscc"
+
           $work = Join-Path $env:RUNNER_TEMP "tdisupport-inno"
           $script = Join-Path $work "TELE-DATA-Support.iss"
           $outputDir = Join-Path $env:GITHUB_WORKSPACE "customer-exe"
