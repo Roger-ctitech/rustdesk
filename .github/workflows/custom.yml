@@ -1,8 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.1
-# BASED ON: v10
-# CHANGE: Fixad installation/sökväg för Inno Setup 7
+# WORKFLOW VERSION: v10.2
+# BASED ON: v10.1
+# CHANGE: Testar Input source 2 som standard i RustDesk 1.4.8
+# NOTE: Detta är ett separat input-test; övrig build lämnas oförändrad
 # ======================================================
 
 name: Build tdisupport
@@ -11,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.1"
+  WORKFLOW_VERSION: "v10.2"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -552,6 +553,36 @@ jobs:
           Select-String `
             -Path $config `
             -Pattern "RENDEZVOUS_SERVERS|RS_PUB_KEY|RENDEZVOUS_PORT|RELAY_PORT"
+
+
+      # ------------------------------------------------
+      # 30.5 - Testa Input source 2 som standard
+      # ------------------------------------------------
+      - name: 30.5 - Set Input source 2 as default
+        shell: pwsh
+        run: |
+          $keyboard = ".\src\keyboard.rs"
+
+          if (-not (Test-Path $keyboard)) {
+            Write-Error "Hittar inte $keyboard"
+            exit 1
+          }
+
+          $content = Get-Content $keyboard -Raw
+
+          $old = 'pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;'
+          $new = 'pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_2;'
+
+          if ($content -notmatch [regex]::Escape($old)) {
+            Write-Error "Hittade inte standardvärdet för Input source i src\keyboard.rs"
+            exit 1
+          }
+
+          $content = $content.Replace($old, $new)
+          Set-Content -Path $keyboard -Value $content -Encoding UTF8
+
+          Write-Host "Input source 2 är nu standard för nya installationer."
+          Select-String -Path $keyboard -Pattern "CONFIG_INPUT_SOURCE_DEFAULT"
 
 
       # ------------------------------------------------
