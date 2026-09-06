@@ -1,8 +1,8 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.2
-# BASED ON: v10.1
-# CHANGE: Testar Input source 2 som standard i RustDesk 1.4.8
+# WORKFLOW VERSION: v10.3
+# BASED ON: v10.2
+# CHANGE: Tvingar Input source 2 vid Windows-start så sparat input-läge inte kan vinna
 # NOTE: Detta är ett separat input-test; övrig build lämnas oförändrad
 # ======================================================
 
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.2"
+  WORKFLOW_VERSION: "v10.3"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -579,9 +579,30 @@ jobs:
           }
 
           $content = $content.Replace($old, $new)
+
+          # V10.3: tvinga Input source 2 vid Windows-init.
+          # Detta gör att ett eventuellt tidigare sparat Input source 1
+          # inte kan vinna över vår standard.
+          $oldInit = 'let cur_input_source = get_cur_session_input_source();'
+          $newInit = @'
+          #[cfg(target_os = "windows")]
+          set_local_option(
+              CONFIG_OPTION_INPUT_SOURCE.to_string(),
+              CONFIG_INPUT_SOURCE_2.to_string(),
+          );
+
+          let cur_input_source = get_cur_session_input_source();
+          '@
+
+          if ($content -notmatch [regex]::Escape($oldInit)) {
+            Write-Error "Hittade inte init_input_source() i src\keyboard.rs"
+            exit 1
+          }
+
+          $content = $content.Replace($oldInit, $newInit, 1)
           Set-Content -Path $keyboard -Value $content -Encoding UTF8
 
-          Write-Host "Input source 2 är nu standard för nya installationer."
+          Write-Host "Input source 2 är standard och tvingas vid Windows-init."
           Select-String -Path $keyboard -Pattern "CONFIG_INPUT_SOURCE_DEFAULT"
 
 
