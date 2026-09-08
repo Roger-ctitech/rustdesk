@@ -1,9 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.4
+# WORKFLOW VERSION: v10.5
 # BASED ON: v10.2
-# CHANGE: Testar utan RustDesk remote-cursor overlay för att undvika blå cursor
-# NOTE: Input source 2 från v10.2 behålls; ingen annan inputändring görs
+# CHANGE: Fallback-cursor i Windows när RustDesk inte kan läsa cursor-data
+# NOTE: Input source 2 från v10.2 behålls. Endast cursor-hanteringen testas.
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.4"
+  WORKFLOW_VERSION: "v10.5"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -585,41 +585,169 @@ jobs:
           Select-String -Path $keyboard -Pattern "CONFIG_INPUT_SOURCE_DEFAULT"
 
 
+
       # ------------------------------------------------
-      # 30.6 - Disable remote cursor overlay
+      # 30.6 - Windows cursor fallback
       # ------------------------------------------------
-      - name: 30.6 - Disable remote cursor overlay
+      - name: 30.6 - Windows cursor fallback
         shell: pwsh
         run: |
-          $files = @(
-            ".\flutter\lib\desktop\pages\desktop_tab_page.dart",
-            ".\flutter\lib\desktop\pages\desktop_home_page.dart",
-            ".\flutter\lib\desktop\widgets\remote_cursor.dart",
-            ".\flutter\lib\desktop\widgets\cursor.dart"
-          )
+          $file = ".\src\server\input_service.rs"
 
-          $found = $false
+          if (-not (Test-Path $file)) {
+            Write-Error "Hittar inte $file"
+            exit 1
+          }
 
-          foreach ($file in $files) {
-            if (Test-Path $file) {
-              $content = Get-Content $file -Raw
+          $content = Get-Content $file -Raw
 
-              # Only change an explicit default boolean if this exact
-              # remote-cursor option exists in the file.
-              if ($content -match 'show_remote_cursor') {
-                Write-Host "Remote cursor reference found in: $file"
-                $found = $true
+          $old = @'
+          fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()> {
+              if let Some(hcursor) = crate::get_cursor()? {
+                  if hcursor != state.hcursor {
+                      let msg;
+                      if let Some(cached) = state.cached_cursor_data.get(&hcursor) {
+                          super::log::trace!("Cursor data cached, hcursor: {}", hcursor);
+                          msg = cached.clone();
+                      } else {
+                          let mut data = crate::get_cursor_data(hcursor)?;
+                          data.colors = hbb_common::compress::compress(&data.colors[..]).into();
+                          let mut tmp = Message::new();
+                          tmp.set_cursor_data(data);
+                          msg = Arc::new(tmp);
+                          state.cached_cursor_data.insert(hcursor, msg.clone());
+                          super::log::trace!("Cursor data updated, hcursor: {}", hcursor);
+                      }
+                      state.hcursor = hcursor;
+                      sp.send_shared(msg.clone());
+                      state.cursor_data = msg;
+                  }
               }
-            }
+              sp.snapshot(|sps| {
+                  sps.send_shared(state.cursor_data.clone());
+                  Ok(())
+              })?;
+              Ok(())
+          }
+          '@
+
+          $new = @'
+          #[cfg(windows)]
+          fn fallback_cursor_data(hcursor: u64) -> CursorData {
+              let width: usize = 16;
+              let height: usize = 16;
+
+              // Enkel svart Windows-liknande pil med transparent bakgrund.
+              let mask: [u16; 16] = [
+                  0x8000, 0xC000, 0xE000, 0xF000,
+                  0xF800, 0xFC00, 0xFE00, 0xFF00,
+                  0xFF80, 0xFFC0, 0xFFE0, 0xF3F0,
+                  0xE1F8, 0xC0FC, 0x007E, 0x003F,
+              ];
+
+              let mut colors = vec![0u8; width * height * 4];
+
+              for y in 0..height {
+                  for x in 0..width {
+                      if (mask[y] & (0x8000 >> x)) != 0 {
+                          let i = (y * width + x) * 4;
+                          // BGRA
+                          colors[i] = 0;
+                          colors[i + 1] = 0;
+                          colors[i + 2] = 0;
+                          colors[i + 3] = 255;
+                      }
+                  }
+              }
+
+              CursorData {
+                  id: hcursor,
+                  hotx: 0,
+                  hoty: 0,
+                  width: width as i32,
+                  height: height as i32,
+                  colors: colors.into(),
+                  ..Default::default()
+              }
           }
 
-          if (-not $found) {
-            Write-Host "Ingen Flutter-fil med show_remote_cursor hittades."
-            Write-Host "Ingen cursor-rendering ändras i detta bygge."
-          } else {
-            Write-Host "Cursor-läget lämnas medvetet oförändrat i källkoden."
-            Write-Host "Detta steg är endast en verifiering för v10.4."
+          fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()> {
+              if let Some(hcursor) = crate::get_cursor()? {
+                  if hcursor != state.hcursor {
+                      let msg;
+
+                      if let Some(cached) = state.cached_cursor_data.get(&hcursor) {
+                          super::log::trace!("Cursor data cached, hcursor: {}", hcursor);
+                          msg = cached.clone();
+                      } else {
+                          let data_result = crate::get_cursor_data(hcursor);
+
+                          let mut data = match data_result {
+                              Ok(data) if !data.colors.is_empty() && data.width > 0 && data.height > 0 => data,
+                              Ok(_) => {
+                                  #[cfg(windows)]
+                                  {
+                                      super::log::warn!("Invalid Windows cursor data; using fallback arrow.");
+                                      fallback_cursor_data(hcursor)
+                                  }
+                                  #[cfg(not(windows))]
+                                  {
+                                      return Err(anyhow::anyhow!("Invalid cursor data"));
+                                  }
+                              }
+                              Err(err) => {
+                                  #[cfg(windows)]
+                                  {
+                                      super::log::warn!("Could not read Windows cursor data: {}; using fallback arrow.", err);
+                                      fallback_cursor_data(hcursor)
+                                  }
+                                  #[cfg(not(windows))]
+                                  {
+                                      return Err(err);
+                                  }
+                              }
+                          };
+
+                          data.colors = hbb_common::compress::compress(&data.colors[..]).into();
+
+                          let mut tmp = Message::new();
+                          tmp.set_cursor_data(data);
+                          msg = Arc::new(tmp);
+                          state.cached_cursor_data.insert(hcursor, msg.clone());
+                          super::log::trace!("Cursor data updated, hcursor: {}", hcursor);
+                      }
+
+                      state.hcursor = hcursor;
+                      sp.send_shared(msg.clone());
+                      state.cursor_data = msg;
+                  }
+              }
+
+              sp.snapshot(|sps| {
+                  sps.send_shared(state.cursor_data.clone());
+                  Ok(())
+              })?;
+              Ok(())
           }
+          '@
+
+          if ($content -notlike "*fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()> {*") {
+            Write-Error "Hittar inte run_cursor i src\server\input_service.rs"
+            exit 1
+          }
+
+          if ($content.Contains("fn fallback_cursor_data(hcursor: u64) -> CursorData")) {
+            Write-Host "Cursor fallback finns redan - ingen ändring behövs."
+          } elseif (-not $content.Contains($old)) {
+            Write-Error "Kunde inte hitta exakt run_cursor-block i RustDesk 1.4.8."
+            exit 1
+          } else {
+            $content = $content.Replace($old, $new)
+            Set-Content -Path $file -Value $content -Encoding UTF8
+            Write-Host "Windows cursor fallback installerad."
+          }
+
+          Select-String -Path $file -Pattern "fallback_cursor_data|using fallback arrow|fn run_cursor"
 
 
       # ------------------------------------------------
