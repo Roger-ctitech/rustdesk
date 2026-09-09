@@ -1,9 +1,10 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.6
+# WORKFLOW VERSION: v10.6.1
 # BASED ON: v10.2
-# CHANGE: Läs alltid Input source 2 på Windows vid anslutningsstart
-# NOTE: Vi ändrar inte sparad input-inställning och rör inte cursor-koden.
+# CHANGE: Windows-sessioner läser Input source 2 som standard
+# NOTE: Bygger vidare på v10.2 och rör inte cursor-koden
+# NOTE: Detta är ett separat input-test; övrig build lämnas oförändrad
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.6"
+  WORKFLOW_VERSION: "v10.6.1"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -585,14 +586,13 @@ jobs:
           Select-String -Path $keyboard -Pattern "CONFIG_INPUT_SOURCE_DEFAULT"
 
 
-
       # ------------------------------------------------
       # 30.6 - Windows: use Input source 2 for session reads
       # ------------------------------------------------
       - name: 30.6 - Windows session input source
         shell: pwsh
         run: |
-          $keyboard = ".\src\keyboard.rs"
+          $keyboard = ".\\src\\keyboard.rs"
 
           if (-not (Test-Path $keyboard)) {
             Write-Error "Hittar inte $keyboard"
@@ -601,56 +601,28 @@ jobs:
 
           $content = Get-Content $keyboard -Raw
 
-          $old = @'
-          pub fn get_cur_session_input_source() -> String {
-              #[cfg(target_os = "linux")]
-              if !crate::platform::linux::is_x11() {
-                  return CONFIG_INPUT_SOURCE_2.to_string();
-              }
-              let input_source = get_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string());
-              if input_source.is_empty() {
-                  CONFIG_INPUT_SOURCE_DEFAULT.to_string()
-              } else {
-                  input_source
-              }
-          }
-          '@
-
+          $old = 'pub fn get_cur_session_input_source() -> String {'
           $new = @'
           pub fn get_cur_session_input_source() -> String {
               #[cfg(target_os = "windows")]
               {
-                  // Do not modify the saved user preference here.
-                  // For Windows sessions, use Mouse Capture (Input source 2)
-                  // when the current session asks which input source to use.
+                  // Use Mouse Capture (Input source 2) for Windows sessions.
+                  // Do not change the saved user preference.
                   return CONFIG_INPUT_SOURCE_2.to_string();
               }
-
-              #[cfg(target_os = "linux")]
-              if !crate::platform::linux::is_x11() {
-                  return CONFIG_INPUT_SOURCE_2.to_string();
-              }
-
-              let input_source = get_local_option(CONFIG_OPTION_INPUT_SOURCE.to_string());
-              if input_source.is_empty() {
-                  CONFIG_INPUT_SOURCE_DEFAULT.to_string()
-              } else {
-                  input_source
-              }
-          }
           '@
 
-          if ($content.Contains($new.Trim())) {
-            Write-Host "v10.6 session input source-patch finns redan."
-          } elseif (-not $content.Contains($old.Trim())) {
-            Write-Error "Hittade inte exakt get_cur_session_input_source i src\keyboard.rs"
+          if (-not $content.Contains($old)) {
+            Write-Error "Hittade inte funktionen get_cur_session_input_source i src\\keyboard.rs"
             exit 1
-          } else {
-            $content = $content.Replace($old.Trim(), $new.Trim())
-            Set-Content -Path $keyboard -Value $content -Encoding UTF8
-            Write-Host "Windows session input source patch installerad."
           }
 
+          # Insert only the Windows session override. The existing function
+          # remains unchanged for Linux and other platforms.
+          $content = $content.Replace($old, $new, 1)
+          Set-Content -Path $keyboard -Value $content -Encoding UTF8
+
+          Write-Host "Windows-sessioner använder nu Input source 2 (Mouse Capture)."
           Select-String -Path $keyboard -Pattern "get_cur_session_input_source|CONFIG_INPUT_SOURCE_2"
 
 
