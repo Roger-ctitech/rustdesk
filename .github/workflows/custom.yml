@@ -1,9 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.4
-# BASED ON: v10.2
-# CHANGE: Testar utan RustDesk remote-cursor overlay för att undvika blå cursor
-# NOTE: Input source 2 från v10.2 behålls; ingen annan inputändring görs
+# WORKFLOW VERSION: v10.2
+# BASED ON: v10.1
+# CHANGE: Testar Input source 2 som standard i RustDesk 1.4.8
+# NOTE: Detta är ett separat input-test; övrig build lämnas oförändrad
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.4"
+  WORKFLOW_VERSION: "v10.2"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -583,43 +583,6 @@ jobs:
 
           Write-Host "Input source 2 är nu standard för nya installationer."
           Select-String -Path $keyboard -Pattern "CONFIG_INPUT_SOURCE_DEFAULT"
-
-
-      # ------------------------------------------------
-      # 30.6 - Disable remote cursor overlay
-      # ------------------------------------------------
-      - name: 30.6 - Disable remote cursor overlay
-        shell: pwsh
-        run: |
-          $files = @(
-            ".\flutter\lib\desktop\pages\desktop_tab_page.dart",
-            ".\flutter\lib\desktop\pages\desktop_home_page.dart",
-            ".\flutter\lib\desktop\widgets\remote_cursor.dart",
-            ".\flutter\lib\desktop\widgets\cursor.dart"
-          )
-
-          $found = $false
-
-          foreach ($file in $files) {
-            if (Test-Path $file) {
-              $content = Get-Content $file -Raw
-
-              # Only change an explicit default boolean if this exact
-              # remote-cursor option exists in the file.
-              if ($content -match 'show_remote_cursor') {
-                Write-Host "Remote cursor reference found in: $file"
-                $found = $true
-              }
-            }
-          }
-
-          if (-not $found) {
-            Write-Host "Ingen Flutter-fil med show_remote_cursor hittades."
-            Write-Host "Ingen cursor-rendering ändras i detta bygge."
-          } else {
-            Write-Host "Cursor-läget lämnas medvetet oförändrat i källkoden."
-            Write-Host "Detta steg är endast en verifiering för v10.4."
-          }
 
 
       # ------------------------------------------------
