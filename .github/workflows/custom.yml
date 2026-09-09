@@ -1,9 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.2
-# BASED ON: v10.1
-# CHANGE: Testar Input source 2 som standard i RustDesk 1.4.8
-# NOTE: Detta är ett separat input-test; övrig build lämnas oförändrad
+# WORKFLOW VERSION: v10.7
+# BASED ON: v10.4
+# CHANGE: Diagnostikloggning av Windows cursor – ingen funktionell ändring
+# NOTE: Input source 2 från v10.2 behålls; ingen annan inputändring görs
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.2"
+  WORKFLOW_VERSION: "v10.7"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -583,6 +583,60 @@ jobs:
 
           Write-Host "Input source 2 är nu standard för nya installationer."
           Select-String -Path $keyboard -Pattern "CONFIG_INPUT_SOURCE_DEFAULT"
+
+
+      # ------------------------------------------------
+      # 30.6 - Cursor diagnostic logging (NO BEHAVIOR CHANGE)
+      # ------------------------------------------------
+      - name: 30.6 - Cursor diagnostic logging
+        shell: pwsh
+        run: |
+          $windows = ".\src\platform\windows.rs"
+          $input = ".\src\server\input_service.rs"
+
+          if (-not (Test-Path $windows)) {
+            Write-Error "Hittar inte $windows"
+            exit 1
+          }
+          if (-not (Test-Path $input)) {
+            Write-Error "Hittar inte $input"
+            exit 1
+          }
+
+          # This build only adds diagnostic logging. It does NOT alter
+          # cursor data, input source, rendering, or mouse behavior.
+          $content = Get-Content $windows -Raw
+
+          $pattern1 = '(ci\.cbSize\s*=\s*std::mem::size_of::<CURSORINFO>\(\) as _;)'
+          $replace1 = '$1' + [Environment]::NewLine + '        log::info!("TD-CURSOR-DIAG get_cursor: hCursor={:x}, flags={:#x}, showing={}", ci.hCursor as usize, ci.flags, (ci.flags & CURSOR_SHOWING) != 0);'
+          $updated = [regex]::Replace($content, $pattern1, $replace1, 1)
+          if ($updated -eq $content) {
+            Write-Error "Kunde inte hitta CURSORINFO-initialiseringen i src\platform\windows.rs"
+            exit 1
+          }
+          $content = $updated
+
+          $pattern2 = '(\s+)(Ok\(CursorData \{\s*id: hcursor,)'
+          $replace2 = '$1log::info!("TD-CURSOR-DIAG get_cursor_data: hCursor={:x}, color={}, width={}, height={}, hotx={}, hoty={}, colors={}", hcursor, ii.is_color(), width, height, ii.0.xHotspot, ii.0.yHotspot, cbits.len());$1$2'
+          $updated = [regex]::Replace($content, $pattern2, $replace2, 1)
+          if ($updated -eq $content) {
+            Write-Error "Kunde inte hitta CursorData-returen i src\platform\windows.rs"
+            exit 1
+          }
+          $content = $updated
+          Set-Content -Path $windows -Value $content -Encoding UTF8
+
+          $content = Get-Content $input -Raw
+          $pattern3 = '(super::log::trace!\("Cursor data updated, hcursor: \{\}", hcursor\);)'
+          $replace3 = '$1' + [Environment]::NewLine + '                super::log::info!("TD-CURSOR-DIAG run_cursor: new hcursor={:x}", hcursor);'
+          $updated = [regex]::Replace($content, $pattern3, $replace3, 1)
+          if ($updated -eq $content) {
+            Write-Error "Kunde inte hitta run_cursor()-loggen i src\server\input_service.rs"
+            exit 1
+          }
+          Set-Content -Path $input -Value $updated -Encoding UTF8
+
+          Write-Host "TD-CURSOR-DIAG installerad. Ingen cursor/input-funktion ändras."
 
 
       # ------------------------------------------------
