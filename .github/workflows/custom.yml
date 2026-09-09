@@ -1,10 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.6.1
+# WORKFLOW VERSION: v10.4
 # BASED ON: v10.2
-# CHANGE: Windows-sessioner läser Input source 2 som standard
-# NOTE: Bygger vidare på v10.2 och rör inte cursor-koden
-# NOTE: Detta är ett separat input-test; övrig build lämnas oförändrad
+# CHANGE: Testar utan RustDesk remote-cursor overlay för att undvika blå cursor
+# NOTE: Input source 2 från v10.2 behålls; ingen annan inputändring görs
 # ======================================================
 
 name: Build tdisupport
@@ -13,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.6.1"
+  WORKFLOW_VERSION: "v10.4"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -587,43 +586,40 @@ jobs:
 
 
       # ------------------------------------------------
-      # 30.6 - Windows: use Input source 2 for session reads
+      # 30.6 - Disable remote cursor overlay
       # ------------------------------------------------
-      - name: 30.6 - Windows session input source
+      - name: 30.6 - Disable remote cursor overlay
         shell: pwsh
         run: |
-          $keyboard = ".\\src\\keyboard.rs"
+          $files = @(
+            ".\flutter\lib\desktop\pages\desktop_tab_page.dart",
+            ".\flutter\lib\desktop\pages\desktop_home_page.dart",
+            ".\flutter\lib\desktop\widgets\remote_cursor.dart",
+            ".\flutter\lib\desktop\widgets\cursor.dart"
+          )
 
-          if (-not (Test-Path $keyboard)) {
-            Write-Error "Hittar inte $keyboard"
-            exit 1
-          }
+          $found = $false
 
-          $content = Get-Content $keyboard -Raw
+          foreach ($file in $files) {
+            if (Test-Path $file) {
+              $content = Get-Content $file -Raw
 
-          $old = 'pub fn get_cur_session_input_source() -> String {'
-          $new = @'
-          pub fn get_cur_session_input_source() -> String {
-              #[cfg(target_os = "windows")]
-              {
-                  // Use Mouse Capture (Input source 2) for Windows sessions.
-                  // Do not change the saved user preference.
-                  return CONFIG_INPUT_SOURCE_2.to_string();
+              # Only change an explicit default boolean if this exact
+              # remote-cursor option exists in the file.
+              if ($content -match 'show_remote_cursor') {
+                Write-Host "Remote cursor reference found in: $file"
+                $found = $true
               }
-          '@
-
-          if (-not $content.Contains($old)) {
-            Write-Error "Hittade inte funktionen get_cur_session_input_source i src\\keyboard.rs"
-            exit 1
+            }
           }
 
-          # Insert only the Windows session override. The existing function
-          # remains unchanged for Linux and other platforms.
-          $content = $content.Replace($old, $new, 1)
-          Set-Content -Path $keyboard -Value $content -Encoding UTF8
-
-          Write-Host "Windows-sessioner använder nu Input source 2 (Mouse Capture)."
-          Select-String -Path $keyboard -Pattern "get_cur_session_input_source|CONFIG_INPUT_SOURCE_2"
+          if (-not $found) {
+            Write-Host "Ingen Flutter-fil med show_remote_cursor hittades."
+            Write-Host "Ingen cursor-rendering ändras i detta bygge."
+          } else {
+            Write-Host "Cursor-läget lämnas medvetet oförändrat i källkoden."
+            Write-Host "Detta steg är endast en verifiering för v10.4."
+          }
 
 
       # ------------------------------------------------
