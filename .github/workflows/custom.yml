@@ -1,8 +1,8 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.7
+# WORKFLOW VERSION: v10.8
 # BASED ON: v10.4
-# CHANGE: Diagnostikloggning av Windows cursor – ingen funktionell ändring
+# CHANGE: Cursor-diagnostik till separat TEMP-fil – ingen funktionell ändring
 # NOTE: Input source 2 från v10.2 behålls; ingen annan inputändring görs
 # ======================================================
 
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.7"
+  WORKFLOW_VERSION: "v10.8"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -586,9 +586,9 @@ jobs:
 
 
       # ------------------------------------------------
-      # 30.6 - Cursor diagnostic logging (NO BEHAVIOR CHANGE)
+      # 30.6 - Cursor diagnostic logging to TEMP file
       # ------------------------------------------------
-      - name: 30.6 - Cursor diagnostic logging
+      - name: 30.6 - Cursor diagnostic logging to TEMP
         shell: pwsh
         run: |
           $windows = ".\src\platform\windows.rs"
@@ -603,12 +603,34 @@ jobs:
             exit 1
           }
 
-          # This build only adds diagnostic logging. It does NOT alter
-          # cursor data, input source, rendering, or mouse behavior.
+          # v10.8: write diagnostics to %TEMP%\TELE-DATA-cursor.txt.
+          # This avoids relying on the RustDesk log configuration.
+          # NO cursor/input/rendering behavior is changed.
           $content = Get-Content $windows -Raw
 
+          $helper = @'
+          
+          fn td_cursor_diag(line: &str) {
+              let mut path = std::env::temp_dir();
+              path.push("TELE-DATA-cursor.txt");
+              if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                  use std::io::Write;
+                  let _ = writeln!(f, "{}", line);
+              }
+          }
+          '@
+
+          # Insert helper immediately before get_cursor().
+          $patternHelper = '(?m)^(pub fn get_cursor\(\) -> ResultType<isize> \{)'
+          $updated = [regex]::Replace($content, $patternHelper, ($helper + '$1'), 1)
+          if ($updated -eq $content) {
+            Write-Error "Kunde inte hitta get_cursor() i src\platform\windows.rs"
+            exit 1
+          }
+          $content = $updated
+
           $pattern1 = '(ci\.cbSize\s*=\s*std::mem::size_of::<CURSORINFO>\(\) as _;)'
-          $replace1 = '$1' + [Environment]::NewLine + '        log::info!("TD-CURSOR-DIAG get_cursor: hCursor={:x}, flags={:#x}, showing={}", ci.hCursor as usize, ci.flags, (ci.flags & CURSOR_SHOWING) != 0);'
+          $replace1 = '$1' + [Environment]::NewLine + '        td_cursor_diag(&format!("get_cursor hCursor={:x} flags={:#x} showing={}", ci.hCursor as usize, ci.flags, (ci.flags & CURSOR_SHOWING) != 0));'
           $updated = [regex]::Replace($content, $pattern1, $replace1, 1)
           if ($updated -eq $content) {
             Write-Error "Kunde inte hitta CURSORINFO-initialiseringen i src\platform\windows.rs"
@@ -617,18 +639,36 @@ jobs:
           $content = $updated
 
           $pattern2 = '(\s+)(Ok\(CursorData \{\s*id: hcursor,)'
-          $replace2 = '$1log::info!("TD-CURSOR-DIAG get_cursor_data: hCursor={:x}, color={}, width={}, height={}, hotx={}, hoty={}, colors={}", hcursor, ii.is_color(), width, height, ii.0.xHotspot, ii.0.yHotspot, cbits.len());$1$2'
+          $replace2 = '$1td_cursor_diag(&format!("get_cursor_data hCursor={:x} color={} width={} height={} hotx={} hoty={} colors={}", hcursor, ii.is_color(), width, height, ii.0.xHotspot, ii.0.yHotspot, cbits.len()));$1$2'
           $updated = [regex]::Replace($content, $pattern2, $replace2, 1)
           if ($updated -eq $content) {
             Write-Error "Kunde inte hitta CursorData-returen i src\platform\windows.rs"
             exit 1
           }
-          $content = $updated
-          Set-Content -Path $windows -Value $content -Encoding UTF8
+          Set-Content -Path $windows -Value $updated -Encoding UTF8
 
           $content = Get-Content $input -Raw
+          $helperInput = @'
+          
+          fn td_cursor_diag_input(line: &str) {
+              let mut path = std::env::temp_dir();
+              path.push("TELE-DATA-cursor.txt");
+              if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                  use std::io::Write;
+                  let _ = writeln!(f, "{}", line);
+              }
+          }
+          '@
+          $patternInputHelper = '(?m)^(fn run_cursor\()'
+          $updated = [regex]::Replace($content, $patternInputHelper, ($helperInput + '$1'), 1)
+          if ($updated -eq $content) {
+            Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
+            exit 1
+          }
+          $content = $updated
+
           $pattern3 = '(super::log::trace!\("Cursor data updated, hcursor: \{\}", hcursor\);)'
-          $replace3 = '$1' + [Environment]::NewLine + '                super::log::info!("TD-CURSOR-DIAG run_cursor: new hcursor={:x}", hcursor);'
+          $replace3 = '$1' + [Environment]::NewLine + '                td_cursor_diag_input(&format!("run_cursor new hcursor={:x}", hcursor));'
           $updated = [regex]::Replace($content, $pattern3, $replace3, 1)
           if ($updated -eq $content) {
             Write-Error "Kunde inte hitta run_cursor()-loggen i src\server\input_service.rs"
@@ -636,10 +676,9 @@ jobs:
           }
           Set-Content -Path $input -Value $updated -Encoding UTF8
 
-          Write-Host "TD-CURSOR-DIAG installerad. Ingen cursor/input-funktion ändras."
+          Write-Host "v10.8: TD-cursor-diagnostik skrivs till %TEMP%\TELE-DATA-cursor.txt. Ingen cursor/input-funktion ändras."
 
 
-      # ------------------------------------------------
       # 30. Verify server configuration
       # ------------------------------------------------
       - name: 30 - Verify server configuration
