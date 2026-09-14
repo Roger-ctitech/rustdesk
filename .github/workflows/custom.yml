@@ -1,9 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.8
-# BASED ON: v10.4
-# CHANGE: Cursor-diagnostik till separat TEMP-fil – ingen funktionell ändring
-# NOTE: Input source 2 från v10.2 behålls; ingen annan inputändring görs
+# WORKFLOW VERSION: v10.9
+# BASED ON: v10.8
+# CHANGE: Fördjupad Windows-cursor-diagnostik – ingen funktionell ändring
+# NOTE: v10.8-diagnostiken behålls; vi loggar nu även GetCursorInfo-resultat och Windows felkod
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.8"
+  WORKFLOW_VERSION: "v10.9"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -603,9 +603,10 @@ jobs:
             exit 1
           }
 
-          # v10.8: diagnostics only. No cursor/input/rendering behavior is changed.
-          # The patch is deliberately idempotent so an existing diagnostic helper
-          # from an earlier workflow version is not inserted a second time.
+          # v10.9: diagnostics only. No cursor/input/rendering behavior is changed.
+          # Keep the existing v10.8 diagnostics and add the raw GetCursorInfo result,
+          # Windows last-error value, and cursor position so we can see why flags=0.
+          # The patch is deliberately idempotent.
           $content = Get-Content $windows -Raw
 
           if ($content -notmatch '(?m)^\s*fn td_cursor_diag\(line: &str\)') {
@@ -635,6 +636,28 @@ jobs:
             $updated = [regex]::Replace($content, $pattern1, $replace1, 1)
             if ($updated -eq $content) {
               Write-Error "Kunde inte hitta CURSORINFO-initialiseringen i src\platform\windows.rs"
+              exit 1
+            }
+            $content = $updated
+          }
+
+          if ($content -notmatch 'TD-CURSOR-DIAG-v10.9 GetCursorInfo') {
+            $needleRaw = 'if crate::portable_service::client::get_cursor_info\(&mut ci\) == FALSE \{'
+            $replaceRaw = 'let td_cursor_info_ok = crate::portable_service::client::get_cursor_info(&mut ci);' + [Environment]::NewLine + '        td_cursor_diag(&format!("TD-CURSOR-DIAG-v10.9 GetCursorInfo ok={} hCursor={:x} flags={:#x} last_error={}", td_cursor_info_ok != FALSE, ci.hCursor as usize, ci.flags, if td_cursor_info_ok == FALSE { GetLastError() } else { 0 }));' + [Environment]::NewLine + '        if td_cursor_info_ok == FALSE {'
+            $updated = [regex]::Replace($content, $needleRaw, $replaceRaw, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta get_cursor_info()-anropet i src\platform\windows.rs"
+              exit 1
+            }
+            $content = $updated
+          }
+
+          if ($content -notmatch 'TD-CURSOR-DIAG-v10.9 CursorPos') {
+            $needlePos = 'td_cursor_diag\(&format!\("get_cursor hCursor=\{:x\} flags=\{:#x\} showing=\{\}", ci\.hCursor as usize, ci\.flags, \(ci\.flags & CURSOR_SHOWING\) != 0\)\);'
+            $replacePos = '$&' + [Environment]::NewLine + '        if let Some((td_x, td_y)) = get_cursor_pos() { td_cursor_diag(&format!("TD-CURSOR-DIAG-v10.9 CursorPos x={} y={}", td_x, td_y)); } else { td_cursor_diag("TD-CURSOR-DIAG-v10.9 CursorPos unavailable"); }'
+            $updated = [regex]::Replace($content, $needlePos, $replacePos, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta cursor-diagnostikraden i src\platform\windows.rs"
               exit 1
             }
             $content = $updated
