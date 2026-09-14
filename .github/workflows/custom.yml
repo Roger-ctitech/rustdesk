@@ -603,13 +603,14 @@ jobs:
             exit 1
           }
 
-          # v10.8: write diagnostics to %TEMP%\TELE-DATA-cursor.txt.
-          # This avoids relying on the RustDesk log configuration.
-          # NO cursor/input/rendering behavior is changed.
+          # v10.8: diagnostics only. No cursor/input/rendering behavior is changed.
+          # The patch is deliberately idempotent so an existing diagnostic helper
+          # from an earlier workflow version is not inserted a second time.
           $content = Get-Content $windows -Raw
 
-          $helper = @'
-          
+          if ($content -notmatch '(?m)^\s*fn td_cursor_diag\(line: &str\)') {
+            $helper = @'
+
           fn td_cursor_diag(line: &str) {
               let mut path = std::env::temp_dir();
               path.push("TELE-DATA-cursor.txt");
@@ -619,37 +620,44 @@ jobs:
               }
           }
           '@
-
-          # Insert helper immediately before get_cursor().
-          $patternHelper = '(?m)^(pub fn get_cursor[^\r\n]*\{\s*$)'
-          $updated = [regex]::Replace($content, $patternHelper, ($helper + '$1'), 1)
-          if ($updated -eq $content) {
-            Write-Error "Kunde inte hitta get_cursor() i src\platform\windows.rs"
-            exit 1
+            $patternHelper = '(?m)^(pub\s+fn\s+get_cursor\s*\([^\r\n]*\)\s*(?:->[^\r\n]+)?\s*\{\s*$)'
+            $updated = [regex]::Replace($content, $patternHelper, ($helper + '$1'), 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta get_cursor() i src\platform\windows.rs"
+              exit 1
+            }
+            $content = $updated
           }
-          $content = $updated
 
-          $pattern1 = '(ci\.cbSize\s*=\s*std::mem::size_of::<CURSORINFO>\(\) as _;)'
-          $replace1 = '$1' + [Environment]::NewLine + '        td_cursor_diag(&format!("get_cursor hCursor={:x} flags={:#x} showing={}", ci.hCursor as usize, ci.flags, (ci.flags & CURSOR_SHOWING) != 0));'
-          $updated = [regex]::Replace($content, $pattern1, $replace1, 1)
-          if ($updated -eq $content) {
-            Write-Error "Kunde inte hitta CURSORINFO-initialiseringen i src\platform\windows.rs"
-            exit 1
+          if ($content -notmatch 'td_cursor_diag\(&format!\("get_cursor hCursor=') {
+            $pattern1 = '(ci\.cbSize\s*=\s*std::mem::size_of::<CURSORINFO>\(\)\s+as\s+_;)'
+            $replace1 = '$1' + [Environment]::NewLine + '        td_cursor_diag(&format!("get_cursor hCursor={:x} flags={:#x} showing={}", ci.hCursor as usize, ci.flags, (ci.flags & CURSOR_SHOWING) != 0));'
+            $updated = [regex]::Replace($content, $pattern1, $replace1, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta CURSORINFO-initialiseringen i src\platform\windows.rs"
+              exit 1
+            }
+            $content = $updated
           }
-          $content = $updated
 
-          $pattern2 = '(\s+)(Ok\(CursorData \{\s*id: hcursor,)'
-          $replace2 = '$1td_cursor_diag(&format!("get_cursor_data hCursor={:x} color={} width={} height={} hotx={} hoty={} colors={}", hcursor, ii.is_color(), width, height, ii.0.xHotspot, ii.0.yHotspot, cbits.len()));$1$2'
-          $updated = [regex]::Replace($content, $pattern2, $replace2, 1)
-          if ($updated -eq $content) {
-            Write-Error "Kunde inte hitta CursorData-returen i src\platform\windows.rs"
-            exit 1
+          if ($content -notmatch 'td_cursor_diag\(&format!\("get_cursor_data hCursor=') {
+            $pattern2 = '(\s+)(Ok\(CursorData \{\s*id:\s*hcursor,)'
+            $replace2 = '$1td_cursor_diag(&format!("get_cursor_data hCursor={:x} color={} width={} height={} hotx={} hoty={} colors={}", hcursor, ii.is_color(), width, height, ii.0.xHotspot, ii.0.yHotspot, cbits.len()));$1$2'
+            $updated = [regex]::Replace($content, $pattern2, $replace2, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta CursorData-returen i src\platform\windows.rs"
+              exit 1
+            }
+            $content = $updated
           }
-          Set-Content -Path $windows -Value $updated -Encoding UTF8
+
+          Set-Content -Path $windows -Value $content -Encoding UTF8
 
           $content = Get-Content $input -Raw
-          $helperInput = @'
-          
+
+          if ($content -notmatch '(?m)^\s*fn td_cursor_diag_input\(line: &str\)') {
+            $helperInput = @'
+
           fn td_cursor_diag_input(line: &str) {
               let mut path = std::env::temp_dir();
               path.push("TELE-DATA-cursor.txt");
@@ -659,22 +667,27 @@ jobs:
               }
           }
           '@
-          $patternInputHelper = '(?m)^(fn run_cursor\()'
-          $updated = [regex]::Replace($content, $patternInputHelper, ($helperInput + '$1'), 1)
-          if ($updated -eq $content) {
-            Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
-            exit 1
+            $patternInputHelper = '(?m)^(fn\s+run_cursor\s*\()'
+            $updated = [regex]::Replace($content, $patternInputHelper, ($helperInput + '$1'), 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
+              exit 1
+            }
+            $content = $updated
           }
-          $content = $updated
 
-          $pattern3 = '(super::log::trace!\("Cursor data updated, hcursor: \{\}", hcursor\);)'
-          $replace3 = '$1' + [Environment]::NewLine + '                td_cursor_diag_input(&format!("run_cursor new hcursor={:x}", hcursor));'
-          $updated = [regex]::Replace($content, $pattern3, $replace3, 1)
-          if ($updated -eq $content) {
-            Write-Error "Kunde inte hitta run_cursor()-loggen i src\server\input_service.rs"
-            exit 1
+          if ($content -notmatch 'td_cursor_diag_input\(&format!\("run_cursor new hcursor=') {
+            $pattern3 = '(super::log::trace!\("Cursor data updated, hcursor: \{\}", hcursor\);)'
+            $replace3 = '$1' + [Environment]::NewLine + '                td_cursor_diag_input(&format!("run_cursor new hcursor={:x}", hcursor));'
+            $updated = [regex]::Replace($content, $pattern3, $replace3, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta run_cursor()-loggen i src\server\input_service.rs"
+              exit 1
+            }
+            $content = $updated
           }
-          Set-Content -Path $input -Value $updated -Encoding UTF8
+
+          Set-Content -Path $input -Value $content -Encoding UTF8
 
           Write-Host "v10.8: TD-cursor-diagnostik skrivs till %TEMP%\TELE-DATA-cursor.txt. Ingen cursor/input-funktion ändras."
 
