@@ -621,7 +621,7 @@ jobs:
           '@
 
           # Insert helper immediately before get_cursor().
-          $patternHelper = '(?m)^(pub fn get_cursor\(\) -> ResultType<isize> \{)'
+          $patternHelper = '(?m)^(pub fn get_cursor[^\r\n]*\{\s*$)'
           $updated = [regex]::Replace($content, $patternHelper, ($helper + '$1'), 1)
           if ($updated -eq $content) {
             Write-Error "Kunde inte hitta get_cursor() i src\platform\windows.rs"
