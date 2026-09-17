@@ -1,9 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v10.9
-# BASED ON: v10.8
-# CHANGE: Fördjupad Windows-cursor-diagnostik – ingen funktionell ändring
-# NOTE: v10.8-diagnostiken behålls; vi loggar nu även GetCursorInfo-resultat och Windows felkod
+# WORKFLOW VERSION: v11.0
+# BASED ON: v10.9
+# CHANGE: Fallback-pil när Windows inte lämnar ut en cursor-handle
+# NOTE: v10.9-diagnostiken behålls. Endast run_cursor ändras: om hCursor saknas skickas en vanlig pil.
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v10.9"
+  WORKFLOW_VERSION: "v11.0"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -712,7 +712,125 @@ jobs:
 
           Set-Content -Path $input -Value $content -Encoding UTF8
 
-          Write-Host "v10.8: TD-cursor-diagnostik skrivs till %TEMP%\TELE-DATA-cursor.txt. Ingen cursor/input-funktion ändras."
+          Write-Host "v10.9: TD-cursor-diagnostik skrivs till %TEMP%\TELE-DATA-cursor.txt."
+
+
+      # ------------------------------------------------
+      # 30.7 - Windows fallback cursor when hCursor is unavailable
+      # ------------------------------------------------
+      - name: 30.7 - Send fallback arrow when Windows cursor handle is unavailable
+        shell: pwsh
+        run: |
+          $input = ".\src\server\input_service.rs"
+
+          if (-not (Test-Path $input)) {
+            Write-Error "Hittar inte $input"
+            exit 1
+          }
+
+          $content = Get-Content $input -Raw
+
+          # v11.0: Keep v10.9 diagnostics. The only functional change is that
+          # when RustDesk cannot obtain a Windows cursor handle (hCursor=0 /
+          # CURSOR_SHOWING not set), we send a normal arrow cursor instead of
+          # sending no cursor shape. This is deliberately handled in
+          # run_cursor(), because the v10.5 fallback never ran when get_cursor()
+          # returned None.
+
+          if ($content -notmatch 'TD_FALLBACK_CURSOR_ID') {
+            $helper = @'
+
+          #[cfg(windows)]
+          const TD_FALLBACK_CURSOR_ID: u64 = 0x5444_4355_5253_4F52;
+
+          #[cfg(windows)]
+          fn td_fallback_cursor_data() -> CursorData {
+              let width: usize = 16;
+              let height: usize = 16;
+
+              // Enkel svart pil med transparent bakgrund.
+              let mask: [u16; 16] = [
+                  0x8000, 0xC000, 0xE000, 0xF000,
+                  0xF800, 0xFC00, 0xFE00, 0xFF00,
+                  0xFF80, 0xFFC0, 0xFFE0, 0xF3F0,
+                  0xE1F8, 0xC0FC, 0x007E, 0x003F,
+              ];
+
+              let mut colors = vec![0u8; width * height * 4];
+
+              for y in 0..height {
+                  for x in 0..width {
+                      if (mask[y] & (0x8000 >> x)) != 0 {
+                          let i = (y * width + x) * 4;
+                          // BGRA
+                          colors[i] = 0;
+                          colors[i + 1] = 0;
+                          colors[i + 2] = 0;
+                          colors[i + 3] = 255;
+                      }
+                  }
+              }
+
+              CursorData {
+                  id: TD_FALLBACK_CURSOR_ID,
+                  hotx: 0,
+                  hoty: 0,
+                  width: width as i32,
+                  height: height as i32,
+                  colors: colors.into(),
+                  ..Default::default()
+              }
+          }
+          '@
+            $pattern = '(?m)^(fn\s+run_cursor\s*\()'
+            $updated = [regex]::Replace($content, $pattern, ($helper + '$1'), 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
+              exit 1
+            }
+            $content = $updated
+          }
+
+          if ($content -notmatch 'let hcursor = crate::get_cursor\(\)\?\.unwrap_or\(TD_FALLBACK_CURSOR_ID\);') {
+            $old = 'if let Some\(hcursor\) = crate::get_cursor\(\)\? \{'
+            $new = 'let hcursor = crate::get_cursor()?.unwrap_or(TD_FALLBACK_CURSOR_ID);' + [Environment]::NewLine + '            if hcursor != state.hcursor {'
+            $updated = [regex]::Replace($content, $old, $new, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta if-let-raden i run_cursor()."
+              exit 1
+            }
+            $content = $updated
+          }
+
+          if ($content -notmatch 'td_fallback_cursor_data\(\)') {
+            $needle = 'let msg;'
+            $replacement = 'let msg;' + [Environment]::NewLine + '                       #[cfg(windows)]' + [Environment]::NewLine + '                       if hcursor == TD_FALLBACK_CURSOR_ID {' + [Environment]::NewLine + '                           let mut data = td_fallback_cursor_data();' + [Environment]::NewLine + '                           data.colors = hbb_common::compress::compress(&data.colors[..]).into();' + [Environment]::NewLine + '                           let mut tmp = Message::new();' + [Environment]::NewLine + '                           tmp.set_cursor_data(data);' + [Environment]::NewLine + '                           msg = Arc::new(tmp);' + [Environment]::NewLine + '                       } else if let Some(cached) = state.cached_cursor_data.get(&hcursor) {'
+            $updated = [regex]::Replace($content, [regex]::Escape($needle), $replacement, 1)
+            if ($updated -eq $content) {
+              Write-Error "Kunde inte hitta 'let msg;' i run_cursor()."
+              exit 1
+            }
+            $content = $updated
+          }
+
+          Set-Content -Path $input -Value $content -Encoding UTF8
+
+          # Structural checks – fail the workflow instead of producing a broken build.
+          $final = Get-Content $input -Raw
+          foreach ($required in @(
+            'TD_FALLBACK_CURSOR_ID',
+            'fn td_fallback_cursor_data()',
+            'let hcursor = crate::get_cursor()?.unwrap_or(TD_FALLBACK_CURSOR_ID);',
+            'if hcursor == TD_FALLBACK_CURSOR_ID',
+            'td_cursor_diag_input'
+          )) {
+            if ($final -notmatch [regex]::Escape($required)) {
+              Write-Error "v11.0-kontroll misslyckades: saknar $required"
+              exit 1
+            }
+          }
+
+          Write-Host "v11.0: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
 
 
       # 30. Verify server configuration
