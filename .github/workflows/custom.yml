@@ -1,7 +1,7 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v11.0.1
-# BASED ON: v11.0
+# WORKFLOW VERSION: v11.0.2
+# BASED ON: v11.0.1
 # CHANGE: Fallback-pil när Windows inte lämnar ut en cursor-handle
 # NOTE: v10.9-diagnostiken behålls. Endast run_cursor ändras: om hCursor saknas skickas en vanlig pil.
 # ======================================================
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v11.0.1"
+  WORKFLOW_VERSION: "v11.0.2"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -715,8 +715,7 @@ jobs:
           Write-Host "v10.9: TD-cursor-diagnostik skrivs till %TEMP%\TELE-DATA-cursor.txt."
 
 
-      # ------------------------------------------------
-      # 30.7 - Windows fallback cursor when hCursor is unavailable
+      # -----------------------------------------------      # 30.7 - Windows fallback cursor when hCursor is unavailable
       # ------------------------------------------------
       - name: 30.7 - Send fallback arrow when Windows cursor handle is unavailable
         shell: pwsh
@@ -730,12 +729,9 @@ jobs:
 
           $content = Get-Content $input -Raw
 
-          # v11.0: Keep v10.9 diagnostics. The only functional change is that
-          # when RustDesk cannot obtain a Windows cursor handle (hCursor=0 /
-          # CURSOR_SHOWING not set), we send a normal arrow cursor instead of
-          # sending no cursor shape. This is deliberately handled in
-          # run_cursor(), because the v10.5 fallback never ran when get_cursor()
-          # returned None.
+          # v11.0.2: robust source patching. We deliberately do not depend on
+          # line indentation or a particular fn declaration format when finding
+          # run_cursor().
 
           if ($content -notmatch 'TD_FALLBACK_CURSOR_ID') {
             $helper = @'
@@ -782,22 +778,28 @@ jobs:
               }
           }
           '@
-            # RustDesk 1.4.8 has this function at top level. Match optional
-            # leading whitespace so the check also works if the source formatting
-            # contains indentation.
-            $pattern = '(?m)^([ \t]*(?:pub\s+)?fn\s+run_cursor\s*\()'
-            $updated = [regex]::Replace($content, $pattern, ($helper + '$1'), 1)
-            if ($updated -eq $content) {
+
+            $marker = 'run_cursor('
+            $pos = $content.IndexOf($marker, [System.StringComparison]::Ordinal)
+            if ($pos -lt 0) {
               Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
               exit 1
             }
-            $content = $updated
+
+            # Insert directly at the beginning of the line containing run_cursor().
+            $lineStart = $content.LastIndexOf("`n", $pos)
+            if ($lineStart -lt 0) {
+              $lineStart = 0
+            } else {
+              $lineStart += 1
+            }
+            $content = $content.Insert($lineStart, $helper)
           }
 
           if ($content -notmatch 'let hcursor = crate::get_cursor\(\)\?\.unwrap_or\(TD_FALLBACK_CURSOR_ID\);') {
-            $old = 'if let Some\(hcursor\) = crate::get_cursor\(\)\? \{'
-            $new = 'let hcursor = crate::get_cursor()?.unwrap_or(TD_FALLBACK_CURSOR_ID);' + [Environment]::NewLine + '            if hcursor != state.hcursor {'
-            $updated = [regex]::Replace($content, $old, $new, 1)
+            $pattern = 'if[ \t]+let[ \t]+Some\(hcursor\)[ \t]*=[ \t]*crate::get_cursor\(\)\?[ \t]*\{'
+            $new = 'let hcursor = crate::get_cursor()?.unwrap_or(TD_FALLBACK_CURSOR_ID);' + [Environment]::NewLine + '        if hcursor != state.hcursor {'
+            $updated = [regex]::Replace($content, $pattern, $new, 1)
             if ($updated -eq $content) {
               Write-Error "Kunde inte hitta if-let-raden i run_cursor()."
               exit 1
@@ -805,15 +807,15 @@ jobs:
             $content = $updated
           }
 
-          if ($content -notmatch 'td_fallback_cursor_data\(\)') {
+          if ($content -notmatch 'if hcursor == TD_FALLBACK_CURSOR_ID') {
             $needle = 'let msg;'
-            $replacement = 'let msg;' + [Environment]::NewLine + '                       #[cfg(windows)]' + [Environment]::NewLine + '                       if hcursor == TD_FALLBACK_CURSOR_ID {' + [Environment]::NewLine + '                           let mut data = td_fallback_cursor_data();' + [Environment]::NewLine + '                           data.colors = hbb_common::compress::compress(&data.colors[..]).into();' + [Environment]::NewLine + '                           let mut tmp = Message::new();' + [Environment]::NewLine + '                           tmp.set_cursor_data(data);' + [Environment]::NewLine + '                           msg = Arc::new(tmp);' + [Environment]::NewLine + '                       } else if let Some(cached) = state.cached_cursor_data.get(&hcursor) {'
-            $updated = [regex]::Replace($content, [regex]::Escape($needle), $replacement, 1)
-            if ($updated -eq $content) {
+            $replacement = 'let msg;' + [Environment]::NewLine + '        #[cfg(windows)]' + [Environment]::NewLine + '        if hcursor == TD_FALLBACK_CURSOR_ID {' + [Environment]::NewLine + '            let mut data = td_fallback_cursor_data();' + [Environment]::NewLine + '            data.colors = hbb_common::compress::compress(&data.colors[..]).into();' + [Environment]::NewLine + '            let mut tmp = Message::new();' + [Environment]::NewLine + '            tmp.set_cursor_data(data);' + [Environment]::NewLine + '            msg = Arc::new(tmp);' + [Environment]::NewLine + '        } else if let Some(cached) = state.cached_cursor_data.get(&hcursor) {'
+            $pos = $content.IndexOf($needle, [System.StringComparison]::Ordinal)
+            if ($pos -lt 0) {
               Write-Error "Kunde inte hitta 'let msg;' i run_cursor()."
               exit 1
             }
-            $content = $updated
+            $content = $content.Remove($pos, $needle.Length).Insert($pos, $replacement)
           }
 
           Set-Content -Path $input -Value $content -Encoding UTF8
@@ -828,12 +830,14 @@ jobs:
             'td_cursor_diag_input'
           )) {
             if ($final -notmatch [regex]::Escape($required)) {
-              Write-Error "v11.0.1-kontroll misslyckades: saknar $required"
+              Write-Error "v11.0.2-kontroll misslyckades: saknar $required"
               exit 1
             }
           }
 
-          Write-Host "v11.0.1: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
+          Write-Host "v11.0.2: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
+
+
 
 
       # 30. Verify server configuration
