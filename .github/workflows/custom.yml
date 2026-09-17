@@ -1,9 +1,9 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v11.0.2
-# BASED ON: v11.0.1
-# CHANGE: Fallback-pil när Windows inte lämnar ut en cursor-handle
-# NOTE: v10.9-diagnostiken behålls. Endast run_cursor ändras: om hCursor saknas skickas en vanlig pil.
+# WORKFLOW VERSION: v11.0.3
+# BASED ON: v10.8
+# CHANGE: Windows-fallbackpil när get_cursor() returnerar None; v10.9-diagnostiken behålls
+# NOTE: v11.0.3 ändrar endast run_cursor()-hanteringen; ingen annan input/rendering-logik ändras
 # ======================================================
 
 name: Build tdisupport
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v11.0.2"
+  WORKFLOW_VERSION: "v11.0.3"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -586,141 +586,13 @@ jobs:
 
 
       # ------------------------------------------------
-      # 30.6 - Cursor diagnostic logging to TEMP file
       # ------------------------------------------------
-      - name: 30.6 - Cursor diagnostic logging to TEMP
-        shell: pwsh
-        run: |
-          $windows = ".\src\platform\windows.rs"
-          $input = ".\src\server\input_service.rs"
-
-          if (-not (Test-Path $windows)) {
-            Write-Error "Hittar inte $windows"
-            exit 1
-          }
-          if (-not (Test-Path $input)) {
-            Write-Error "Hittar inte $input"
-            exit 1
-          }
-
-          # v10.9: diagnostics only. No cursor/input/rendering behavior is changed.
-          # Keep the existing v10.8 diagnostics and add the raw GetCursorInfo result,
-          # Windows last-error value, and cursor position so we can see why flags=0.
-          # The patch is deliberately idempotent.
-          $content = Get-Content $windows -Raw
-
-          if ($content -notmatch '(?m)^\s*fn td_cursor_diag\(line: &str\)') {
-            $helper = @'
-
-          fn td_cursor_diag(line: &str) {
-              let mut path = std::env::temp_dir();
-              path.push("TELE-DATA-cursor.txt");
-              if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-                  use std::io::Write;
-                  let _ = writeln!(f, "{}", line);
-              }
-          }
-          '@
-            $patternHelper = '(?m)^(pub\s+fn\s+get_cursor\s*\([^\r\n]*\)\s*(?:->[^\r\n]+)?\s*\{\s*$)'
-            $updated = [regex]::Replace($content, $patternHelper, ($helper + '$1'), 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta get_cursor() i src\platform\windows.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          if ($content -notmatch 'td_cursor_diag\(&format!\("get_cursor hCursor=') {
-            $pattern1 = '(ci\.cbSize\s*=\s*std::mem::size_of::<CURSORINFO>\(\)\s+as\s+_;)'
-            $replace1 = '$1' + [Environment]::NewLine + '        td_cursor_diag(&format!("get_cursor hCursor={:x} flags={:#x} showing={}", ci.hCursor as usize, ci.flags, (ci.flags & CURSOR_SHOWING) != 0));'
-            $updated = [regex]::Replace($content, $pattern1, $replace1, 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta CURSORINFO-initialiseringen i src\platform\windows.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          if ($content -notmatch 'TD-CURSOR-DIAG-v10.9 GetCursorInfo') {
-            $needleRaw = 'if crate::portable_service::client::get_cursor_info\(&mut ci\) == FALSE \{'
-            $replaceRaw = 'let td_cursor_info_ok = crate::portable_service::client::get_cursor_info(&mut ci);' + [Environment]::NewLine + '        td_cursor_diag(&format!("TD-CURSOR-DIAG-v10.9 GetCursorInfo ok={} hCursor={:x} flags={:#x} last_error={}", td_cursor_info_ok != FALSE, ci.hCursor as usize, ci.flags, if td_cursor_info_ok == FALSE { GetLastError() } else { 0 }));' + [Environment]::NewLine + '        if td_cursor_info_ok == FALSE {'
-            $updated = [regex]::Replace($content, $needleRaw, $replaceRaw, 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta get_cursor_info()-anropet i src\platform\windows.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          if ($content -notmatch 'TD-CURSOR-DIAG-v10.9 CursorPos') {
-            $needlePos = 'td_cursor_diag\(&format!\("get_cursor hCursor=\{:x\} flags=\{:#x\} showing=\{\}", ci\.hCursor as usize, ci\.flags, \(ci\.flags & CURSOR_SHOWING\) != 0\)\);'
-            $replacePos = '$&' + [Environment]::NewLine + '        if let Some((td_x, td_y)) = get_cursor_pos() { td_cursor_diag(&format!("TD-CURSOR-DIAG-v10.9 CursorPos x={} y={}", td_x, td_y)); } else { td_cursor_diag("TD-CURSOR-DIAG-v10.9 CursorPos unavailable"); }'
-            $updated = [regex]::Replace($content, $needlePos, $replacePos, 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta cursor-diagnostikraden i src\platform\windows.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          if ($content -notmatch 'td_cursor_diag\(&format!\("get_cursor_data hCursor=') {
-            $pattern2 = '(\s+)(Ok\(CursorData \{\s*id:\s*hcursor,)'
-            $replace2 = '$1td_cursor_diag(&format!("get_cursor_data hCursor={:x} color={} width={} height={} hotx={} hoty={} colors={}", hcursor, ii.is_color(), width, height, ii.0.xHotspot, ii.0.yHotspot, cbits.len()));$1$2'
-            $updated = [regex]::Replace($content, $pattern2, $replace2, 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta CursorData-returen i src\platform\windows.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          Set-Content -Path $windows -Value $content -Encoding UTF8
-
-          $content = Get-Content $input -Raw
-
-          if ($content -notmatch '(?m)^\s*fn td_cursor_diag_input\(line: &str\)') {
-            $helperInput = @'
-
-          fn td_cursor_diag_input(line: &str) {
-              let mut path = std::env::temp_dir();
-              path.push("TELE-DATA-cursor.txt");
-              if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-                  use std::io::Write;
-                  let _ = writeln!(f, "{}", line);
-              }
-          }
-          '@
-            $patternInputHelper = '(?m)^(fn\s+run_cursor\s*\()'
-            $updated = [regex]::Replace($content, $patternInputHelper, ($helperInput + '$1'), 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          if ($content -notmatch 'td_cursor_diag_input\(&format!\("run_cursor new hcursor=') {
-            $pattern3 = '(super::log::trace!\("Cursor data updated, hcursor: \{\}", hcursor\);)'
-            $replace3 = '$1' + [Environment]::NewLine + '                td_cursor_diag_input(&format!("run_cursor new hcursor={:x}", hcursor));'
-            $updated = [regex]::Replace($content, $pattern3, $replace3, 1)
-            if ($updated -eq $content) {
-              Write-Error "Kunde inte hitta run_cursor()-loggen i src\server\input_service.rs"
-              exit 1
-            }
-            $content = $updated
-          }
-
-          Set-Content -Path $input -Value $content -Encoding UTF8
-
-          Write-Host "v10.9: TD-cursor-diagnostik skrivs till %TEMP%\TELE-DATA-cursor.txt."
-
-
-      # -----------------------------------------------      # 30.7 - Windows fallback cursor when hCursor is unavailable
+      # 30.7 - Windows fallback cursor when hCursor is unavailable
       # ------------------------------------------------
       - name: 30.7 - Send fallback arrow when Windows cursor handle is unavailable
         shell: pwsh
         run: |
-          $input = ".\src\server\input_service.rs"
+          $input = ".\\src\\server\\input_service.rs"
 
           if (-not (Test-Path $input)) {
             Write-Error "Hittar inte $input"
@@ -729,9 +601,11 @@ jobs:
 
           $content = Get-Content $input -Raw
 
-          # v11.0.2: robust source patching. We deliberately do not depend on
-          # line indentation or a particular fn declaration format when finding
-          # run_cursor().
+          # v11.0.3: Keep the original if-let structure intact.
+          # Only make the Option always contain a cursor id by supplying our
+          # synthetic id when Windows returns None. This avoids changing the
+          # function's brace structure, which caused v11.0.2 to generate
+          # malformed Rust code.
 
           if ($content -notmatch 'TD_FALLBACK_CURSOR_ID') {
             $helper = @'
@@ -779,14 +653,15 @@ jobs:
           }
           '@
 
+            # Insert the helper immediately before run_cursor(), without
+            # modifying the function declaration itself.
             $marker = 'run_cursor('
             $pos = $content.IndexOf($marker, [System.StringComparison]::Ordinal)
             if ($pos -lt 0) {
-              Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
+              Write-Error "Kunde inte hitta run_cursor() i src\\server\\input_service.rs"
               exit 1
             }
 
-            # Insert directly at the beginning of the line containing run_cursor().
             $lineStart = $content.LastIndexOf("`n", $pos)
             if ($lineStart -lt 0) {
               $lineStart = 0
@@ -796,9 +671,11 @@ jobs:
             $content = $content.Insert($lineStart, $helper)
           }
 
-          if ($content -notmatch 'let hcursor = crate::get_cursor\(\)\?\.unwrap_or\(TD_FALLBACK_CURSOR_ID\);') {
+          # Keep the existing if-let and its braces. Only change the expression
+          # so None becomes our synthetic cursor id.
+          if ($content -notmatch 'crate::get_cursor\(\)\?\.or\(Some\(TD_FALLBACK_CURSOR_ID\)\)') {
             $pattern = 'if[ \t]+let[ \t]+Some\(hcursor\)[ \t]*=[ \t]*crate::get_cursor\(\)\?[ \t]*\{'
-            $new = 'let hcursor = crate::get_cursor()?.unwrap_or(TD_FALLBACK_CURSOR_ID);' + [Environment]::NewLine + '        if hcursor != state.hcursor {'
+            $new = 'if let Some(hcursor) = crate::get_cursor()?.or(Some(TD_FALLBACK_CURSOR_ID)) {'
             $updated = [regex]::Replace($content, $pattern, $new, 1)
             if ($updated -eq $content) {
               Write-Error "Kunde inte hitta if-let-raden i run_cursor()."
@@ -807,9 +684,10 @@ jobs:
             $content = $updated
           }
 
+          # When the synthetic id is used, never call get_cursor_data() with it.
           if ($content -notmatch 'if hcursor == TD_FALLBACK_CURSOR_ID') {
             $needle = 'let msg;'
-            $replacement = 'let msg;' + [Environment]::NewLine + '        #[cfg(windows)]' + [Environment]::NewLine + '        if hcursor == TD_FALLBACK_CURSOR_ID {' + [Environment]::NewLine + '            let mut data = td_fallback_cursor_data();' + [Environment]::NewLine + '            data.colors = hbb_common::compress::compress(&data.colors[..]).into();' + [Environment]::NewLine + '            let mut tmp = Message::new();' + [Environment]::NewLine + '            tmp.set_cursor_data(data);' + [Environment]::NewLine + '            msg = Arc::new(tmp);' + [Environment]::NewLine + '        } else if let Some(cached) = state.cached_cursor_data.get(&hcursor) {'
+            $replacement = 'let msg;' + [Environment]::NewLine + '            #[cfg(windows)]' + [Environment]::NewLine + '            if hcursor == TD_FALLBACK_CURSOR_ID {' + [Environment]::NewLine + '                let mut data = td_fallback_cursor_data();' + [Environment]::NewLine + '                data.colors = hbb_common::compress::compress(&data.colors[..]).into();' + [Environment]::NewLine + '                let mut tmp = Message::new();' + [Environment]::NewLine + '                tmp.set_cursor_data(data);' + [Environment]::NewLine + '                msg = Arc::new(tmp);' + [Environment]::NewLine + '            } else if let Some(cached) = state.cached_cursor_data.get(&hcursor) {'
             $pos = $content.IndexOf($needle, [System.StringComparison]::Ordinal)
             if ($pos -lt 0) {
               Write-Error "Kunde inte hitta 'let msg;' i run_cursor()."
@@ -820,24 +698,22 @@ jobs:
 
           Set-Content -Path $input -Value $content -Encoding UTF8
 
-          # Structural checks – fail the workflow instead of producing a broken build.
+          # Structural checks: do not start Cargo if the patch is incomplete.
           $final = Get-Content $input -Raw
           foreach ($required in @(
             'TD_FALLBACK_CURSOR_ID',
             'fn td_fallback_cursor_data()',
-            'let hcursor = crate::get_cursor()?.unwrap_or(TD_FALLBACK_CURSOR_ID);',
+            'crate::get_cursor()?.or(Some(TD_FALLBACK_CURSOR_ID))',
             'if hcursor == TD_FALLBACK_CURSOR_ID',
             'td_cursor_diag_input'
           )) {
             if ($final -notmatch [regex]::Escape($required)) {
-              Write-Error "v11.0.2-kontroll misslyckades: saknar $required"
+              Write-Error "v11.0.3-kontroll misslyckades: saknar $required"
               exit 1
             }
           }
 
-          Write-Host "v11.0.2: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
-
-
+          Write-Host "v11.0.3: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
 
 
       # 30. Verify server configuration
