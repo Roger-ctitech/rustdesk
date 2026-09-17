@@ -1,7 +1,7 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v11.0
-# BASED ON: v10.9
+# WORKFLOW VERSION: v11.0.1
+# BASED ON: v11.0
 # CHANGE: Fallback-pil när Windows inte lämnar ut en cursor-handle
 # NOTE: v10.9-diagnostiken behålls. Endast run_cursor ändras: om hCursor saknas skickas en vanlig pil.
 # ======================================================
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v11.0"
+  WORKFLOW_VERSION: "v11.0.1"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -782,7 +782,10 @@ jobs:
               }
           }
           '@
-            $pattern = '(?m)^(fn\s+run_cursor\s*\()'
+            # RustDesk 1.4.8 has this function at top level. Match optional
+            # leading whitespace so the check also works if the source formatting
+            # contains indentation.
+            $pattern = '(?m)^([ \t]*(?:pub\s+)?fn\s+run_cursor\s*\()'
             $updated = [regex]::Replace($content, $pattern, ($helper + '$1'), 1)
             if ($updated -eq $content) {
               Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
@@ -825,12 +828,12 @@ jobs:
             'td_cursor_diag_input'
           )) {
             if ($final -notmatch [regex]::Escape($required)) {
-              Write-Error "v11.0-kontroll misslyckades: saknar $required"
+              Write-Error "v11.0.1-kontroll misslyckades: saknar $required"
               exit 1
             }
           }
 
-          Write-Host "v11.0: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
+          Write-Host "v11.0.1: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
 
 
       # 30. Verify server configuration
