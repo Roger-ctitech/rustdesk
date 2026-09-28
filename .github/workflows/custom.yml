@@ -1,8 +1,12 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v11.0.4
-# BASED ON: v10.8
-# CHANGE: Windows-fallbackpil när get_cursor() returnerar None; v10.9-diagnostiken behålls
+# WORKFLOW VERSION: v11.0.5
+# BASED ON: v11.0.4
+# CHANGE: Fix i steg 30.7 - regex-mönstret för att hitta
+#         "if let Some(hcursor) = crate::get_cursor()? {"
+#         hade \(\?\) (fel ordning) istället för \(\)\? (rätt
+#         ordning), vilket gjorde att raden aldrig hittades och
+#         bygget alltid failade i steg 30.7.
 # NOTE: v11.0.3 ändrar endast run_cursor()-hanteringen; ingen annan input/rendering-logik ändras
 # ======================================================
 
@@ -12,7 +16,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v11.0.3"
+  WORKFLOW_VERSION: "v11.0.5"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -730,7 +734,7 @@ jobs:
 
           $content = Get-Content $input -Raw
 
-          # v11.0.4: Keep run_cursor() structure completely intact.
+          # v11.0.5: Keep run_cursor() structure completely intact.
           # Only supply a synthetic cursor id when Windows returns None,
           # and make get_cursor_data() use fallback CursorData for that id.
 
@@ -790,7 +794,7 @@ jobs:
           }
 
           if ($content -notmatch 'crate::get_cursor\(\)\?\.or\(Some\(TD_FALLBACK_CURSOR_ID\)\)') {
-            $pattern = 'if[ \t]+let[ \t]+Some\(hcursor\)[ \t]*=[ \t]*crate::get_cursor\(\?\)[ \t]*\{'
+            $pattern = 'if[ \t]+let[ \t]+Some\(hcursor\)[ \t]*=[ \t]*crate::get_cursor\(\)\?[ \t]*\{'
             $new = 'if let Some(hcursor) = crate::get_cursor()?.or(Some(TD_FALLBACK_CURSOR_ID)) {'
             $updated = [regex]::Replace($content, $pattern, $new, 1)
             if ($updated -eq $content) {
@@ -822,12 +826,12 @@ jobs:
             'td_cursor_diag_input'
           )) {
             if ($final -notmatch [regex]::Escape($required)) {
-              Write-Error "v11.0.4-kontroll misslyckades: saknar $required"
+              Write-Error "v11.0.5-kontroll misslyckades: saknar $required"
               exit 1
             }
           }
 
-          Write-Host "v11.0.4: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
+          Write-Host "v11.0.5: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
 
 
       # 30. Verify server configuration
