@@ -1,12 +1,16 @@
 # ======================================================
 # TELE & DATA Support - GitHub Actions workflow
-# WORKFLOW VERSION: v11.0.5
-# BASED ON: v11.0.4
-# CHANGE: Fix i steg 30.7 - regex-mönstret för att hitta
-#         "if let Some(hcursor) = crate::get_cursor()? {"
-#         hade \(\?\) (fel ordning) istället för \(\)\? (rätt
-#         ordning), vilket gjorde att raden aldrig hittades och
-#         bygget alltid failade i steg 30.7.
+# WORKFLOW VERSION: v11.0.6
+# BASED ON: v11.0.5
+# CHANGE: Fix i steg 30.7 - hjälpkoden (TD_FALLBACK_CURSOR_ID
+#         och td_fallback_cursor_data()) klistrades in vid FÖRSTA
+#         förekomsten av texten "run_cursor(" i filen, vilket kunde
+#         vara ett anrop till funktionen istället för själva
+#         definitionen. Hamnade den inuti en annan funktions kropp
+#         blev konstanten/funktionen bara lokalt synliga där, vilket
+#         gav "cannot find value/function ... in this scope" vid
+#         kompilering. Söker nu specifikt efter raden "fn run_cursor("
+#         med regex istället för valfri förekomst av texten.
 # NOTE: v11.0.3 ändrar endast run_cursor()-hanteringen; ingen annan input/rendering-logik ändras
 # ======================================================
 
@@ -16,7 +20,7 @@ on:
   workflow_dispatch:
 
 env:
-  WORKFLOW_VERSION: "v11.0.5"
+  WORKFLOW_VERSION: "v11.0.6"
 
   # ==================================================
   # 1. TELE-DATA / RustDesk server
@@ -734,7 +738,7 @@ jobs:
 
           $content = Get-Content $input -Raw
 
-          # v11.0.5: Keep run_cursor() structure completely intact.
+          # v11.0.6: Keep run_cursor() structure completely intact.
           # Only supply a synthetic cursor id when Windows returns None,
           # and make get_cursor_data() use fallback CursorData for that id.
 
@@ -781,12 +785,12 @@ jobs:
           }
           '@
 
-            $marker = 'run_cursor('
-            $pos = $content.IndexOf($marker, [System.StringComparison]::Ordinal)
-            if ($pos -lt 0) {
-              Write-Error "Kunde inte hitta run_cursor() i src\server\input_service.rs"
+            $defMatch = [regex]::Match($content, '(?m)^[ \t]*(?:pub(?:\([^)]*\))?[ \t]+)?(?:async[ \t]+)?fn[ \t]+run_cursor[ \t]*\(')
+            if (-not $defMatch.Success) {
+              Write-Error "Kunde inte hitta run_cursor()-definitionen (fn run_cursor) i src\server\input_service.rs"
               exit 1
             }
+            $pos = $defMatch.Index
 
             $lineStart = $content.LastIndexOf("`n", $pos)
             if ($lineStart -lt 0) { $lineStart = 0 } else { $lineStart += 1 }
@@ -826,12 +830,12 @@ jobs:
             'td_cursor_diag_input'
           )) {
             if ($final -notmatch [regex]::Escape($required)) {
-              Write-Error "v11.0.5-kontroll misslyckades: saknar $required"
+              Write-Error "v11.0.6-kontroll misslyckades: saknar $required"
               exit 1
             }
           }
 
-          Write-Host "v11.0.5: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
+          Write-Host "v11.0.6: fallback-pil aktiverad när Windows inte lämnar ut hCursor."
 
 
       # 30. Verify server configuration
